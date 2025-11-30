@@ -1,0 +1,137 @@
+##############################
+# 一、Qt / C++ / CMake 构建产物
+##############################
+
+# 常见构建目录
+build/
+build-*/
+cmake-build-*/
+out/
+bin/
+lib/
+
+# CMake 生成文件
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+CMakeScripts/
+Makefile
+install_manifest.txt
+
+# Qt 生成文件（一般只在构建目录中出现）
+moc_*.cpp
+ui_*.h
+qrc_*.cpp
+*.qm
+
+##############################
+# 二、Qt Creator / IDE 配置
+##############################
+
+# Qt Creator
+*.pro.user
+*.pro.user.*
+*.qbs.user
+*.qbs.user.*
+*.qtcreator.*
+*.autosave
+*.qmlproject.user
+*.qmlproject.user.*
+
+# Visual Studio / CLion / 等
+.vs/
+.idea/
+
+# VS Code（如果你不想提交 VSCode 配置就放开下面这一行）
+#.vscode/
+
+##############################
+# 三、Python 后端相关
+##############################
+
+# 编译/缓存
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 虚拟环境
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# 打包 / 分发
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# 工具缓存
+.pytest_cache/
+.mypy_cache/
+.dmypy.json
+.pyre/
+.pytype/
+
+##############################
+# 四、日志与临时文件
+##############################
+
+logs/
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+
+##############################
+# 五、操作系统杂项
+##############################
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+Desktop.ini
+$RECYCLE.BIN/
+
+##############################
+# 六、LaTeX 编译产物（如有论文）
+##############################
+
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.brf
+*.fdb_latexmk
+*.fls
+*.fmt
+*.log
+*.lot
+*.lof
+*.out
+*.run.xml
+*.synctex.gz
+*.synctex(busy)
+*.toc
+*.xdv
+
+##############################
+# 七、其他常见工具文件
+##############################
+
+# Jupyter
+.ipynb_checkpoints/
+
+# 编辑器备份
+*~
+*.bak
+*.orig
