@@ -181,36 +181,81 @@ if (Test-Path $ConfigSrc) {
 }
 
 # ============================================================================
-# Step 4: Create Launcher Script
+# Step 4: Build Native Launcher
 # ============================================================================
 Write-Host ""
-Write-Host "Step 4: Creating launcher..." -ForegroundColor Green
+Write-Host "Step 4: Building native launcher..." -ForegroundColor Green
 Write-Host "----------------------------------------"
 
-# Create a launcher that starts both frontend and backend
-$LauncherContent = @'
-@echo off
-setlocal
+$LauncherDir = Join-Path $ProjectRoot "launcher"
+$LauncherSrc = Join-Path $LauncherDir "main.cpp"
+$LauncherRc = Join-Path $LauncherDir "resource.rc"
+$LauncherRes = Join-Path $LauncherDir "resource.res"
+$LauncherExe = Join-Path $DistDir "RigidLabeler.exe"
 
-set "SCRIPT_DIR=%~dp0"
-cd /d "%SCRIPT_DIR%"
+if (-not (Test-Path $LauncherSrc)) {
+    Write-Host "ERROR: Launcher source not found at $LauncherSrc" -ForegroundColor Red
+    exit 1
+}
 
-:: Start backend in background
-start "" /B "%SCRIPT_DIR%backend\rigidlabeler_backend\rigidlabeler_backend.exe"
+# Find MinGW tools (from Qt MinGW or system)
+$MinGWBin = Join-Path $QtPath "..\Tools\mingw1120_64\bin"
+if (-not (Test-Path $MinGWBin)) {
+    $MinGWBin = Join-Path $QtPath "..\Tools\mingw_64\bin"
+}
 
-:: Wait a moment for backend to start
-timeout /t 2 /nobreak > nul
+$GppPath = Join-Path $MinGWBin "g++.exe"
+$WindresPath = Join-Path $MinGWBin "windres.exe"
 
-:: Start frontend
-start "" "%SCRIPT_DIR%frontend\frontend.exe"
+if (-not (Test-Path $GppPath)) {
+    # Try system g++
+    $GppPath = "g++"
+    $WindresPath = "windres"
+}
 
-exit
-'@
+Write-Host "Compiling launcher with: $GppPath"
 
-$LauncherPath = Join-Path $DistDir "RigidLabeler.bat"
-Set-Content -Path $LauncherPath -Value $LauncherContent -Encoding ASCII
+# Compile resource file (for icon)
+if (Test-Path $LauncherRc) {
+    Write-Host "Compiling resource file for icon..."
+    & $WindresPath $LauncherRc -O coff -o $LauncherRes
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "WARNING: Failed to compile resource file, launcher will have no icon" -ForegroundColor Yellow
+        $LauncherRes = $null
+    }
+}
 
-Write-Host "Launcher created."
+# Compile the launcher
+if ($LauncherRes -and (Test-Path $LauncherRes)) {
+    & $GppPath -o $LauncherExe $LauncherSrc $LauncherRes -mwindows -static -O2
+} else {
+    & $GppPath -o $LauncherExe $LauncherSrc -mwindows -static -O2
+}
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "ERROR: Failed to compile launcher!" -ForegroundColor Red
+    Write-Host "Make sure g++ is available (from Qt MinGW or system PATH)" -ForegroundColor Yellow
+    exit 1
+}
+
+# Clean up temporary resource file
+if (Test-Path $LauncherRes) {
+    Remove-Item $LauncherRes -ErrorAction SilentlyContinue
+}
+
+Write-Host "Native launcher compiled: $LauncherExe"
+
+# Copy frontend files to dist root (next to launcher)
+Write-Host "Copying frontend files to dist root..."
+Get-ChildItem -Path $FrontendDist | ForEach-Object {
+    Copy-Item $_.FullName -Destination $DistDir -Recurse -Force
+}
+
+# Copy backend folder to dist root
+Write-Host "Copying backend to dist root..."
+Copy-Item (Join-Path $BackendDist "rigidlabeler_backend") -Destination $DistDir -Recurse -Force
+
+Write-Host "Launcher setup complete."
 
 # ============================================================================
 # Step 5: Build Installer with Inno Setup

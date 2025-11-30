@@ -30,20 +30,12 @@ DisableDirPage=no
 OutputDir=Output
 OutputBaseFilename=RigidLabeler_Setup_{#MyAppVersion}
 SetupIconFile=ico.ico
-UninstallDisplayIcon={app}\frontend\frontend.exe
+UninstallDisplayIcon={app}\RigidLabeler.exe
 
 ; Compression
 Compression=lzma2/ultra64
 SolidCompression=yes
 LZMAUseSeparateProcess=yes
-
-; Privileges (admin not required for user install)
-PrivilegesRequired=lowest
-PrivilegesRequiredOverridesAllowed=dialog
-
-; Visual settings
-WizardStyle=modern
-WizardSizePercent=120
 
 ; License and info files (optional)
 ; LicenseFile=..\LICENSE
@@ -55,39 +47,41 @@ Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.i
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked; OnlyBelowVersion: 6.1; Check: not IsAdminInstallMode
 
 [Files]
-; Frontend files
-Source: "dist\frontend\*"; DestDir: "{app}\frontend"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Main launcher executable
+Source: "dist\RigidLabeler.exe"; DestDir: "{app}"; Flags: ignoreversion
+
+; Frontend executable and Qt dependencies (all in app root)
+Source: "dist\frontend.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "dist\*.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "dist\iconengines\*"; DestDir: "{app}\iconengines"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: DirExists(ExpandConstant('{#SourcePath}\dist\iconengines'))
+Source: "dist\imageformats\*"; DestDir: "{app}\imageformats"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: DirExists(ExpandConstant('{#SourcePath}\dist\imageformats'))
+Source: "dist\platforms\*"; DestDir: "{app}\platforms"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: DirExists(ExpandConstant('{#SourcePath}\dist\platforms'))
+Source: "dist\styles\*"; DestDir: "{app}\styles"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: DirExists(ExpandConstant('{#SourcePath}\dist\styles'))
+Source: "dist\translations\*"; DestDir: "{app}\translations"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: DirExists(ExpandConstant('{#SourcePath}\dist\translations'))
 
 ; Backend files
-Source: "dist\backend\rigidlabeler_backend\*"; DestDir: "{app}\backend\rigidlabeler_backend"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "dist\rigidlabeler_backend\*"; DestDir: "{app}\rigidlabeler_backend"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 ; Config files
 Source: "dist\config\*"; DestDir: "{app}\config"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: DirExists(ExpandConstant('{#SourcePath}\dist\config'))
-
-; Launcher
-Source: "dist\RigidLabeler.bat"; DestDir: "{app}"; Flags: ignoreversion
 
 [Dirs]
 ; Create data directory for user files
 Name: "{app}\data"
 
 [Icons]
-; Start menu shortcut
-Name: "{group}\{#MyAppName}"; Filename: "{app}\RigidLabeler.bat"; IconFilename: "{app}\frontend\frontend.exe"; WorkingDir: "{app}"
+; Start menu shortcut - points to launcher
+Name: "{group}\{#MyAppName}"; Filename: "{app}\RigidLabeler.exe"; WorkingDir: "{app}"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 
 ; Desktop shortcut
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\RigidLabeler.bat"; IconFilename: "{app}\frontend\frontend.exe"; WorkingDir: "{app}"; Tasks: desktopicon
-
-; Quick launch shortcut
-Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\{#MyAppName}"; Filename: "{app}\RigidLabeler.bat"; IconFilename: "{app}\frontend\frontend.exe"; Tasks: quicklaunchicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\RigidLabeler.exe"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
 ; Option to launch app after installation
-Filename: "{app}\RigidLabeler.bat"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent shellexec
+Filename: "{app}\RigidLabeler.exe"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
 ; Clean up generated files
