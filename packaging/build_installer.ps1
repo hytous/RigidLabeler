@@ -133,14 +133,17 @@ if (-not $SkipBackend) {
         --hidden-import "uvicorn.protocols.websockets.auto" `
         --hidden-import "uvicorn.lifespan" `
         --hidden-import "uvicorn.lifespan.on" `
+        --hidden-import "fastapi" `
+        --hidden-import "starlette" `
+        --hidden-import "anyio" `
         --hidden-import "numpy" `
-        --hidden-import "cv2" `
         --hidden-import "PIL" `
         --hidden-import "torch" `
         --hidden-import "yaml" `
         --hidden-import "pydantic" `
         --collect-all "numpy" `
-        --collect-all "cv2" `
+        --collect-all "fastapi" `
+        --collect-all "starlette" `
         --add-data "$BackendPackage;rigidlabeler_backend" `
         --distpath "$BackendDist" `
         --workpath "$PackagingDir\build" `

@@ -34,8 +34,8 @@ from ..io.label_store import (
     LabelStoreError
 )
 from ..io.image_loader import (
-    load_image, get_image_size, save_image, warp_image,
-    ImageLoadError, HAS_OPENCV
+    load_image, get_image_size, save_image,
+    ImageLoadError
 )
 from ..utils.logging_utils import setup_logging, get_logger
 from .. import __version__
@@ -248,15 +248,17 @@ async def warp_preview_endpoint(request: WarpPreviewRequest):
     """Generate a warp preview image.
     
     Applies the transformation to the moving image and saves
-    the result as a preview file.
+    the result as a preview file. Uses PyTorch for warping.
     """
-    if not HAS_OPENCV:
-        return ApiResponse.error(
-            ErrorCode.INTERNAL_ERROR,
-            "OpenCV is required for warp preview. Install opencv-python."
-        )
-    
     try:
+        from ..core.warp_utils import warp_image_pytorch, HAS_TORCH
+        
+        if not HAS_TORCH:
+            return ApiResponse.error(
+                ErrorCode.INTERNAL_ERROR,
+                "PyTorch is required for warp preview. Install torch."
+            )
+        
         config = get_config()
         
         # Get transformation matrix
@@ -282,8 +284,8 @@ async def warp_preview_endpoint(request: WarpPreviewRequest):
         except ImageLoadError as e:
             return ApiResponse.error(e.error_code, str(e))
         
-        # Warp the moving image
-        warped = warp_image(moving_img, matrix, fixed_size)
+        # Warp the moving image using PyTorch
+        warped = warp_image_pytorch(moving_img, matrix, fixed_size)
         
         # Generate output filename
         if request.output_name:

@@ -30,15 +30,13 @@ class ImageLoadError(Exception):
 
 
 def load_image(path: str) -> np.ndarray:
-    """Load an image from disk.
-    
-    Tries OpenCV first, falls back to PIL.
+    """Load an image from disk using PIL.
     
     Args:
         path: Path to the image file.
         
     Returns:
-        Image as numpy array (H, W, C) in BGR format (if color).
+        Image as numpy array (H, W, C) in RGB format (if color).
         
     Raises:
         ImageLoadError: If loading fails.
@@ -46,27 +44,22 @@ def load_image(path: str) -> np.ndarray:
     if not os.path.exists(path):
         raise ImageLoadError(f"Image file not found: {path}")
     
-    if HAS_OPENCV:
-        img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
-        if img is None:
-            raise ImageLoadError(f"Failed to load image with OpenCV: {path}")
-        return img
-    
-    elif HAS_PIL:
-        try:
-            pil_img = Image.open(path)
-            img = np.array(pil_img)
-            # Convert RGB to BGR if color image
-            if len(img.shape) == 3 and img.shape[2] == 3:
-                img = img[:, :, ::-1].copy()
-            return img
-        except Exception as e:
-            raise ImageLoadError(f"Failed to load image with PIL: {e}")
-    
-    else:
+    if not HAS_PIL:
         raise ImageLoadError(
-            "No image loading library available. Install opencv-python or Pillow."
+            "PIL is required for image loading. Install Pillow."
         )
+    
+    try:
+        pil_img = Image.open(path)
+        # Convert to RGB if necessary
+        if pil_img.mode == 'RGBA':
+            pil_img = pil_img.convert('RGB')
+        elif pil_img.mode not in ('RGB', 'L'):
+            pil_img = pil_img.convert('RGB')
+        img = np.array(pil_img)
+        return img
+    except Exception as e:
+        raise ImageLoadError(f"Failed to load image with PIL: {e}")
 
 
 def get_image_size(path: str) -> Tuple[int, int]:
@@ -84,98 +77,39 @@ def get_image_size(path: str) -> Tuple[int, int]:
     if not os.path.exists(path):
         raise ImageLoadError(f"Image file not found: {path}")
     
-    if HAS_PIL:
-        try:
-            with Image.open(path) as img:
-                width, height = img.size
-                return (height, width)
-        except Exception as e:
-            raise ImageLoadError(f"Failed to get image size: {e}")
-    
-    elif HAS_OPENCV:
-        img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
-        if img is None:
-            raise ImageLoadError(f"Failed to read image: {path}")
-        return img.shape[:2]
-    
-    else:
+    if not HAS_PIL:
         raise ImageLoadError(
-            "No image loading library available. Install opencv-python or Pillow."
+            "PIL is required for image operations. Install Pillow."
         )
+    
+    try:
+        with Image.open(path) as img:
+            width, height = img.size
+            return (height, width)
+    except Exception as e:
+        raise ImageLoadError(f"Failed to get image size: {e}")
 
 
 def save_image(path: str, image: np.ndarray) -> None:
-    """Save an image to disk.
+    """Save an image to disk using PIL.
     
     Args:
         path: Output path.
-        image: Image array to save.
+        image: Image array to save (RGB format).
         
     Raises:
         ImageLoadError: If saving fails.
     """
+    if not HAS_PIL:
+        raise ImageLoadError(
+            "PIL is required for image operations. Install Pillow."
+        )
+    
     # Ensure directory exists
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     
-    if HAS_OPENCV:
-        success = cv2.imwrite(path, image)
-        if not success:
-            raise ImageLoadError(f"Failed to save image: {path}")
-    
-    elif HAS_PIL:
-        try:
-            # Convert BGR to RGB if color image
-            if len(image.shape) == 3 and image.shape[2] == 3:
-                image = image[:, :, ::-1]
-            pil_img = Image.fromarray(image)
-            pil_img.save(path)
-        except Exception as e:
-            raise ImageLoadError(f"Failed to save image: {e}")
-    
-    else:
-        raise ImageLoadError(
-            "No image library available. Install opencv-python or Pillow."
-        )
-
-
-def warp_image(
-    image: np.ndarray,
-    matrix_3x3: np.ndarray,
-    output_size: Tuple[int, int]
-) -> np.ndarray:
-    """Apply a 3x3 transformation to an image.
-    
-    Args:
-        image: Input image array.
-        matrix_3x3: 3x3 transformation matrix.
-        output_size: (height, width) of output image.
-        
-    Returns:
-        Warped image array.
-        
-    Raises:
-        ImageLoadError: If warping fails.
-    """
-    if not HAS_OPENCV:
-        raise ImageLoadError(
-            "OpenCV is required for image warping. Install opencv-python."
-        )
-    
-    height, width = output_size
-    
-    # Use warpAffine for 2x3 matrix (more efficient for rigid/affine)
-    # or warpPerspective for full 3x3
-    matrix_2x3 = matrix_3x3[:2, :]
-    
     try:
-        warped = cv2.warpAffine(
-            image,
-            matrix_2x3,
-            (width, height),
-            flags=cv2.INTER_LINEAR,
-            borderMode=cv2.BORDER_CONSTANT,
-            borderValue=0
-        )
-        return warped
+        pil_img = Image.fromarray(image)
+        pil_img.save(path)
     except Exception as e:
-        raise ImageLoadError(f"Failed to warp image: {e}")
+        raise ImageLoadError(f"Failed to save image: {e}")

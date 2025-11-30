@@ -240,6 +240,10 @@ def warp_image_torch(
     return warped
 
 
+# Alias for backward compatibility
+warp_image_pytorch = warp_image_torch
+
+
 def create_checkerboard(
     fixed_image: np.ndarray,
     warped_moving: np.ndarray,
