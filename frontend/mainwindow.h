@@ -9,6 +9,7 @@
 #include <QRubberBand>
 #include <QUndoStack>
 #include <QTranslator>
+#include <QTimer>
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -23,11 +24,13 @@ class QGraphicsEllipseItem;
 class QGraphicsView;
 class QGraphicsItemGroup;
 class QGraphicsLineItem;
+class PreviewDialog;
 
 struct ComputeRigidResult;
 struct LabelSaveResult;
 struct LabelData;
 struct HealthCheckResult;
+struct CheckerboardPreviewResult;
 
 /**
  * @brief Main application window for RigidLabeler.
@@ -54,14 +57,16 @@ private slots:
     void clearImages();
     
     // Navigation operations
+    void prevFixedImage();
     void nextFixedImage();
+    void prevMovingImage();
     void nextMovingImage();
+    void prevPair();
     void nextPair();
     
     // Label operations
     void saveLabel();
     void loadLabel();
-    void exportToGTFolder();
     
     // Transform operations
     void computeTransform();
@@ -78,6 +83,10 @@ private slots:
     void deleteSelectedTiePoint();
     void clearAllTiePoints();
     void onTiePointSelectionChanged();
+    void exportTiePoints();
+    void importTiePoints();
+    void exportMatrix();
+    void onOriginModeToggled(bool topLeftOrigin);
     
     // Image view interactions
     void onFixedViewClicked(const QPointF &pos);
@@ -92,6 +101,7 @@ private slots:
     void onComputeRigidCompleted(const ComputeRigidResult &result);
     void onSaveLabelCompleted(const LabelSaveResult &result);
     void onLoadLabelCompleted(const LabelData &result);
+    void onCheckerboardPreviewCompleted(const CheckerboardPreviewResult &result);
     
     // About dialog
     void showAbout();
@@ -103,6 +113,15 @@ private slots:
     // Language
     void switchToEnglish();
     void switchToChinese();
+    
+    // Real-time compute mode
+    void onRealtimeComputeToggled(bool enabled);
+    void onRealtimeComputeTimeout();
+    void onPairCompleted(int pairIndex);
+    void updateRealtimeComputeState();
+    
+    // Preview
+    void onPreviewRefreshRequested(int gridSize);
 
 private:
     void setupConnections();
@@ -116,10 +135,16 @@ private:
     
     void showError(const QString &title, const QString &message);
     void showInfo(const QString &title, const QString &message);
+    void showSuccessToast(const QString &message, int durationMs = 2000);
     
     bool eventFilter(QObject *obj, QEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
     void wheelEventOnView(QGraphicsView *view, QWheelEvent *event);
+    
+    // Coordinate conversion helpers
+    QPointF pixelToDisplayCoord(const QPointF &pixelPos, bool isFixed) const;
+    QString formatDisplayCoord(const QPointF &pixelPos, bool isFixed) const;
+    void updateTiePointModelCoordinateOffsets();
     
     // Image navigation helpers
     QStringList getImageFilesInDir(const QString &dir);
@@ -196,9 +221,8 @@ private:
     QStringList m_movingImageFiles;
     int m_movingImageIndex;
     
-    // GT export
-    QString m_gtExportRootDir;
-    int m_gtExportCounter;
+    // Matrix export
+    QString m_matrixExportDir;
     
     // Mouse interaction state
     bool m_isPanning;
@@ -214,6 +238,18 @@ private:
     // Language/Translation
     QTranslator *m_translator;
     QString m_currentLanguage;
+    
+    // Real-time compute mode
+    QTimer *m_realtimeComputeTimer;
+    bool m_realtimeComputeEnabled;
+    bool m_realtimeComputePending;  // A compute is pending after timer expires
+    
+    // Coordinate origin mode (false = center origin, true = top-left origin)
+    bool m_useTopLeftOrigin;
+    
+    // Preview dialog
+    PreviewDialog *m_previewDialog;
+    int m_currentPreviewGridSize;
 };
 
 #endif // MAINWINDOW_H

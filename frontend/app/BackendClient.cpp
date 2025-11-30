@@ -390,3 +390,69 @@ void BackendClient::handleListLabelsReply()
     
     emit listLabelsCompleted(true, labels, QString());
 }
+
+// ============================================================================
+// Checkerboard Preview
+// ============================================================================
+
+void BackendClient::requestCheckerboardPreview(const QString &imageFixed,
+                                                const QString &imageMoving,
+                                                const QVector<QVector<double>> &matrix3x3,
+                                                int boardSize,
+                                                bool useCenterOrigin)
+{
+    QJsonArray matrixArray;
+    for (const auto &row : matrix3x3) {
+        QJsonArray rowArray;
+        for (double val : row) {
+            rowArray.append(val);
+        }
+        matrixArray.append(rowArray);
+    }
+    
+    QJsonObject requestBody;
+    requestBody["image_fixed"] = imageFixed;
+    requestBody["image_moving"] = imageMoving;
+    requestBody["matrix_3x3"] = matrixArray;
+    requestBody["board_size"] = boardSize;
+    requestBody["use_center_origin"] = useCenterOrigin;
+    
+    QNetworkRequest request = createRequest("/warp/checkerboard");
+    QNetworkReply *reply = m_networkManager->post(request, QJsonDocument(requestBody).toJson());
+    connect(reply, &QNetworkReply::finished, this, &BackendClient::handleCheckerboardPreviewReply);
+}
+
+void BackendClient::handleCheckerboardPreviewReply()
+{
+    QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
+    if (!reply) return;
+    reply->deleteLater();
+    
+    CheckerboardPreviewResult result;
+    bool ok;
+    QString errorMsg;
+    
+    QJsonObject json = parseResponse(reply, ok, errorMsg);
+    
+    if (!ok) {
+        result.errorMessage = errorMsg;
+        emit checkerboardPreviewCompleted(result);
+        return;
+    }
+    
+    QString status = json["status"].toString();
+    if (status != "ok") {
+        result.errorMessage = json["message"].toString();
+        result.errorCode = json["error_code"].toString();
+        emit checkerboardPreviewCompleted(result);
+        return;
+    }
+    
+    QJsonObject data = json["data"].toObject();
+    result.success = true;
+    result.imageBase64 = data["image_base64"].toString();
+    result.width = data["width"].toInt();
+    result.height = data["height"].toInt();
+    
+    emit checkerboardPreviewCompleted(result);
+}

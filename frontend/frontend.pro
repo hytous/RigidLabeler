@@ -11,6 +11,7 @@ CONFIG += c++17
 SOURCES += \
     main.cpp \
     mainwindow.cpp \
+    PreviewDialog.cpp \
     app/AppConfig.cpp \
     app/BackendClient.cpp \
     model/ImagePairModel.cpp \
@@ -18,6 +19,7 @@ SOURCES += \
 
 HEADERS += \
     mainwindow.h \
+    PreviewDialog.h \
     app/AppConfig.h \
     app/BackendClient.h \
     model/ImagePairModel.h \

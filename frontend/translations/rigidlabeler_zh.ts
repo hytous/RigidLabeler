@@ -24,8 +24,16 @@
         <translation>加载移动图像...</translation>
     </message>
     <message>
+        <source>&lt; Prev</source>
+        <translation>&lt; 上一张</translation>
+    </message>
+    <message>
         <source>Next &gt;</source>
         <translation>下一张 &gt;</translation>
+    </message>
+    <message>
+        <source>&lt;&lt; Prev Pair</source>
+        <translation>&lt;&lt; 上一对</translation>
     </message>
     <message>
         <source>Fit</source>
@@ -65,7 +73,7 @@
     </message>
     <message>
         <source>Allow Scale (Similarity Transform)</source>
-        <translation>允许缩放 (相似变换)</translation>
+        <translation>考虑尺度变换 (相似变换)</translation>
     </message>
     <message>
         <source>Sync Zoom/Pan</source>
@@ -104,8 +112,16 @@
         <translation>下一对 &gt;&gt;</translation>
     </message>
     <message>
-        <source>Export to GT Folder...</source>
-        <translation>导出到GT文件夹...</translation>
+        <source>Export Matrix...</source>
+        <translation>导出矩阵...</translation>
+    </message>
+    <message>
+        <source>Select Matrix Export Folder</source>
+        <translation>选择矩阵导出文件夹</translation>
+    </message>
+    <message>
+        <source>Saved successfully</source>
+        <translation>保存成功</translation>
     </message>
     <message>
         <source>Transform Result</source>
@@ -447,6 +463,151 @@ ID: %1
         <source>Export 3x3 matrix to GT folder as numbered txt files</source>
         <translation>将3x3矩阵导出到GT文件夹（编号txt文件）</translation>
     </message>
+    <!-- Real-time compute mode -->
+    <message>
+        <source>Real-time Compute Mode</source>
+        <translation>实时计算模式</translation>
+    </message>
+    <message>
+        <source>Automatically compute transform 10s after adding a complete point pair (requires 3+ pairs)</source>
+        <translation>添加完整点对后10秒自动计算变换（需要3个以上点对）</translation>
+    </message>
+    <message>
+        <source>Real-time compute mode enabled. Transform will auto-compute 10s after adding a pair.</source>
+        <translation>实时计算模式已启用。添加点对后10秒将自动计算变换。</translation>
+    </message>
+    <message>
+        <source>Real-time compute mode disabled.</source>
+        <translation>实时计算模式已禁用。</translation>
+    </message>
+    <message>
+        <source>Auto-computing transform...</source>
+        <translation>正在自动计算变换...</translation>
+    </message>
+    <message>
+        <source>Pair #%1 complete. Auto-compute in 10 seconds...</source>
+        <translation>点对 #%1 完成。10秒后自动计算...</translation>
+    </message>
+    <message>
+        <source>Real-time compute mode auto-disabled (less than 3 complete pairs).</source>
+        <translation>实时计算模式已自动禁用（完整点对少于3个）。</translation>
+    </message>
+    <!-- Import/Export tie points -->
+    <message>
+        <source>Export Points...</source>
+        <translation>导出点对...</translation>
+    </message>
+    <message>
+        <source>Import Points...</source>
+        <translation>导入点对...</translation>
+    </message>
+    <message>
+        <source>Export tie points to a CSV file</source>
+        <translation>将点对导出到CSV文件</translation>
+    </message>
+    <message>
+        <source>Import tie points from a CSV file</source>
+        <translation>从CSV文件导入点对</translation>
+    </message>
+    <message>
+        <source>Export Tie Points</source>
+        <translation>导出点对</translation>
+    </message>
+    <message>
+        <source>Import Tie Points</source>
+        <translation>导入点对</translation>
+    </message>
+    <message>
+        <source>CSV Files (*.csv);;All Files (*)</source>
+        <translation>CSV文件 (*.csv);;所有文件 (*)</translation>
+    </message>
+    <message>
+        <source>Export Error</source>
+        <translation>导出错误</translation>
+    </message>
+    <message>
+        <source>Import Error</source>
+        <translation>导入错误</translation>
+    </message>
+    <message>
+        <source>No complete tie points to export.</source>
+        <translation>没有完整的点对可导出。</translation>
+    </message>
+    <message>
+        <source>Cannot open file for writing: %1</source>
+        <translation>无法打开文件进行写入: %1</translation>
+    </message>
+    <message>
+        <source>Cannot open file for reading: %1</source>
+        <translation>无法打开文件进行读取: %1</translation>
+    </message>
+    <message>
+        <source>Exported %1 tie points to %2</source>
+        <translation>已导出 %1 个点对到 %2</translation>
+    </message>
+    <message>
+        <source>Imported %1 tie points from %2</source>
+        <translation>已从 %2 导入 %1 个点对</translation>
+    </message>
+    <message>
+        <source>No valid tie points found in file.</source>
+        <translation>文件中未找到有效的点对。</translation>
+    </message>
+    <!-- Coordinate origin mode -->
+    <message>
+        <source>Origin at Top-Left Corner</source>
+        <translation>原点位于左上角</translation>
+    </message>
+    <message>
+        <source>When checked, coordinates use top-left as origin (0,0). Default uses image center as origin.</source>
+        <translation>勾选时，坐标以左上角为原点(0,0)。默认以图像中心为原点。</translation>
+    </message>
+    <message>
+        <source>Coordinate origin: Top-left corner (0,0)</source>
+        <translation>坐标原点: 左上角 (0,0)</translation>
+    </message>
+    <message>
+        <source>Coordinate origin: Image center (0,0)</source>
+        <translation>坐标原点: 图像中心 (0,0)</translation>
+    </message>
+    <!-- Preview messages -->
+    <message>
+        <source>Please load both fixed and moving images first.</source>
+        <translation>请先加载固定图像和移动图像。</translation>
+    </message>
+    <message>
+        <source>Generating checkerboard preview...</source>
+        <translation>正在生成棋盘格预览...</translation>
+    </message>
+    <message>
+        <source>Preview generation failed: %1</source>
+        <translation>预览生成失败: %1</translation>
+    </message>
+    <message>
+        <source>Checkerboard preview generated.</source>
+        <translation>棋盘格预览已生成。</translation>
+    </message>
+    <message>
+        <source>Failed to decode preview image</source>
+        <translation>解码预览图像失败</translation>
+    </message>
+    <message>
+        <source>No valid transform available</source>
+        <translation>没有有效的变换可用</translation>
+    </message>
+    <message>
+        <source>Refreshing preview with grid size %1...</source>
+        <translation>使用网格大小 %1 刷新预览...</translation>
+    </message>
+    <!-- Point count display updates -->
+    <message>
+        <source>Points: %1 complete (%2 partial)</source>
+        <translation>点数: %1 个完整 (%2 个部分)</translation>
+    </message>
+    <message>
+        <source>Points: %1/%2</source>
+        <translation>点数: %1/%2</translation>
+    </message>
 </context>
 <context>
     <name>TiePointModel</name>
@@ -488,6 +649,113 @@ ID: %1
     <message>
         <source>Select Fixed Point</source>
         <translation>选择固定点</translation>
+    </message>
+</context>
+<context>
+    <name>PreviewDialog</name>
+    <message>
+        <source>Checkerboard Preview</source>
+        <translation>棋盘格预览</translation>
+    </message>
+    <message>
+        <source>Grid Size:</source>
+        <translation>网格大小:</translation>
+    </message>
+    <message>
+        <source>Number of grid cells per row/column (2-64)</source>
+        <translation>每行/列的网格单元数 (2-64)</translation>
+    </message>
+    <message>
+        <source>Refresh</source>
+        <translation>刷新</translation>
+    </message>
+    <message>
+        <source>Regenerate preview with new grid size</source>
+        <translation>使用新的网格大小重新生成预览</translation>
+    </message>
+    <message>
+        <source>+</source>
+        <translation>+</translation>
+    </message>
+    <message>
+        <source>-</source>
+        <translation>-</translation>
+    </message>
+    <message>
+        <source>Zoom In</source>
+        <translation>放大</translation>
+    </message>
+    <message>
+        <source>Zoom Out</source>
+        <translation>缩小</translation>
+    </message>
+    <message>
+        <source>Fit</source>
+        <translation>适应窗口</translation>
+    </message>
+    <message>
+        <source>Fit to Window</source>
+        <translation>适应窗口</translation>
+    </message>
+    <message>
+        <source>Zoom: %1%</source>
+        <translation>缩放: %1%</translation>
+    </message>
+    <message>
+        <source>Save Image</source>
+        <translation>保存图像</translation>
+    </message>
+    <message>
+        <source>Save preview image to file</source>
+        <translation>保存预览图像到文件</translation>
+    </message>
+    <message>
+        <source>Loading...</source>
+        <translation>加载中...</translation>
+    </message>
+    <message>
+        <source>Generating preview...</source>
+        <translation>正在生成预览...</translation>
+    </message>
+    <message>
+        <source>Error: </source>
+        <translation>错误: </translation>
+    </message>
+    <message>
+        <source>Failed to decode image data</source>
+        <translation>解码图像数据失败</translation>
+    </message>
+    <message>
+        <source>Image: %1 x %2 pixels</source>
+        <translation>图像: %1 x %2 像素</translation>
+    </message>
+    <message>
+        <source>Grid size changed to %1. Click Refresh to update.</source>
+        <translation>网格大小已更改为 %1。点击刷新以更新。</translation>
+    </message>
+    <message>
+        <source>Warning</source>
+        <translation>警告</translation>
+    </message>
+    <message>
+        <source>No image to save</source>
+        <translation>没有可保存的图像</translation>
+    </message>
+    <message>
+        <source>Save Checkerboard Image</source>
+        <translation>保存棋盘格图像</translation>
+    </message>
+    <message>
+        <source>PNG Image (*.png);;JPEG Image (*.jpg *.jpeg);;All Files (*)</source>
+        <translation>PNG 图像 (*.png);;JPEG 图像 (*.jpg *.jpeg);;所有文件 (*)</translation>
+    </message>
+    <message>
+        <source>Image saved: %1</source>
+        <translation>图像已保存: %1</translation>
+    </message>
+    <message>
+        <source>Failed to save image</source>
+        <translation>保存图像失败</translation>
     </message>
 </context>
 </TS>

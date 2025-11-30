@@ -37,13 +37,29 @@ QVariant TiePointModel::data(const QModelIndex &index, int role) const
         case ColIndex:
             return index.row() + 1;  // 1-based index
         case ColFixedX:
-            return pair.hasFixed() ? QString::number(pair.fixed->x(), 'f', 2) : QString("-");
+            if (pair.hasFixed()) {
+                QPointF displayPos = toDisplayCoord(*pair.fixed, true);
+                return QString::number(displayPos.x(), 'f', 2);
+            }
+            return QString("-");
         case ColFixedY:
-            return pair.hasFixed() ? QString::number(pair.fixed->y(), 'f', 2) : QString("-");
+            if (pair.hasFixed()) {
+                QPointF displayPos = toDisplayCoord(*pair.fixed, true);
+                return QString::number(displayPos.y(), 'f', 2);
+            }
+            return QString("-");
         case ColMovingX:
-            return pair.hasMoving() ? QString::number(pair.moving->x(), 'f', 2) : QString("-");
+            if (pair.hasMoving()) {
+                QPointF displayPos = toDisplayCoord(*pair.moving, false);
+                return QString::number(displayPos.x(), 'f', 2);
+            }
+            return QString("-");
         case ColMovingY:
-            return pair.hasMoving() ? QString::number(pair.moving->y(), 'f', 2) : QString("-");
+            if (pair.hasMoving()) {
+                QPointF displayPos = toDisplayCoord(*pair.moving, false);
+                return QString::number(displayPos.y(), 'f', 2);
+            }
+            return QString("-");
         }
     }
 
@@ -123,15 +139,26 @@ bool TiePointModel::setData(const QModelIndex &index, const QVariant &value, int
 
     int pairIndex = m_pairs.at(index.row()).index;
 
+    // Convert display coordinate back to pixel coordinate
+    // The user enters display coordinates, we need to store pixel coordinates
+    auto displayToPixel = [this](double displayVal, bool isX, bool isFixed) -> double {
+        if (m_useTopLeftOrigin) {
+            return displayVal;
+        }
+        const QPointF &offset = isFixed ? m_fixedOffset : m_movingOffset;
+        return displayVal + (isX ? offset.x() : offset.y());
+    };
+
     switch (index.column()) {
     case ColFixedX:
     case ColFixedY: {
         int idx = findFixedPointIndex(pairIndex);
         if (idx >= 0) {
+            double pixelVal = displayToPixel(val, index.column() == ColFixedX, true);
             if (index.column() == ColFixedX)
-                m_fixedPoints[idx].position.setX(val);
+                m_fixedPoints[idx].position.setX(pixelVal);
             else
-                m_fixedPoints[idx].position.setY(val);
+                m_fixedPoints[idx].position.setY(pixelVal);
         }
         break;
     }
@@ -139,10 +166,11 @@ bool TiePointModel::setData(const QModelIndex &index, const QVariant &value, int
     case ColMovingY: {
         int idx = findMovingPointIndex(pairIndex);
         if (idx >= 0) {
+            double pixelVal = displayToPixel(val, index.column() == ColMovingX, false);
             if (index.column() == ColMovingX)
-                m_movingPoints[idx].position.setX(val);
+                m_movingPoints[idx].position.setX(pixelVal);
             else
-                m_movingPoints[idx].position.setY(val);
+                m_movingPoints[idx].position.setY(pixelVal);
         }
         break;
     }
@@ -625,4 +653,42 @@ int TiePointModel::findMovingPointIndex(int pairIndex) const
         }
     }
     return -1;
+}
+
+// ============================================================================
+// Coordinate Display Settings
+// ============================================================================
+
+void TiePointModel::setDisplayCoordinateOffset(const QPointF &fixedOffset, const QPointF &movingOffset)
+{
+    m_fixedOffset = fixedOffset;
+    m_movingOffset = movingOffset;
+    
+    // Notify that all data has changed (for display refresh)
+    if (m_pairs.count() > 0) {
+        emit dataChanged(index(0, ColFixedX), index(m_pairs.count() - 1, ColMovingY));
+    }
+}
+
+void TiePointModel::setUseTopLeftOrigin(bool useTopLeft)
+{
+    if (m_useTopLeftOrigin != useTopLeft) {
+        m_useTopLeftOrigin = useTopLeft;
+        
+        // Notify that all data has changed
+        if (m_pairs.count() > 0) {
+            emit dataChanged(index(0, ColFixedX), index(m_pairs.count() - 1, ColMovingY));
+        }
+    }
+}
+
+QPointF TiePointModel::toDisplayCoord(const QPointF &pixelPos, bool isFixed) const
+{
+    if (m_useTopLeftOrigin) {
+        return pixelPos;
+    }
+    
+    // Convert to center-origin coordinates
+    const QPointF &offset = isFixed ? m_fixedOffset : m_movingOffset;
+    return QPointF(pixelPos.x() - offset.x(), pixelPos.y() - offset.y());
 }

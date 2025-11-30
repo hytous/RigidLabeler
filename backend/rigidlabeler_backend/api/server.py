@@ -20,7 +20,8 @@ from .schemas import (
     ComputeRigidRequest, ComputeRigidResult,
     LabelSaveRequest, LabelSaveResult,
     Label, LabelListItem, TiePoint, RigidParams,
-    WarpPreviewRequest, WarpPreviewResult
+    WarpPreviewRequest, WarpPreviewResult,
+    CheckerboardPreviewRequest, CheckerboardPreviewResult
 )
 from ..config import get_config
 from ..core.transforms import (
@@ -304,6 +305,76 @@ async def warp_preview_endpoint(request: WarpPreviewRequest):
         
     except Exception as e:
         logger.exception("Unexpected error in warp_preview")
+        return ApiResponse.error(
+            ErrorCode.INTERNAL_ERROR,
+            f"Internal error: {str(e)}"
+        )
+
+
+@app.post("/warp/checkerboard", response_model=ApiResponse)
+async def checkerboard_preview_endpoint(request: CheckerboardPreviewRequest):
+    """Generate a checkerboard preview image.
+    
+    Uses PyTorch for image warping (supports Chinese file paths).
+    Returns the image as base64-encoded PNG.
+    """
+    try:
+        from ..core.warp_utils import generate_checkerboard_preview, HAS_TORCH
+        
+        if not HAS_TORCH:
+            return ApiResponse.error(
+                ErrorCode.INTERNAL_ERROR,
+                "PyTorch is required for checkerboard preview. Install torch."
+            )
+        
+        # Get transformation matrix
+        if request.matrix_3x3 is not None:
+            matrix = np.array(request.matrix_3x3)
+        elif request.rigid is not None:
+            matrix = rigid_params_to_matrix(
+                request.rigid.theta_deg,
+                request.rigid.tx,
+                request.rigid.ty,
+                request.rigid.scale
+            )
+        else:
+            return ApiResponse.error(
+                ErrorCode.INVALID_INPUT,
+                "Must provide either 'rigid' or 'matrix_3x3'"
+            )
+        
+        # Validate file existence
+        import os
+        if not os.path.exists(request.image_fixed):
+            return ApiResponse.error(
+                ErrorCode.IO_ERROR,
+                f"Fixed image not found: {request.image_fixed}"
+            )
+        if not os.path.exists(request.image_moving):
+            return ApiResponse.error(
+                ErrorCode.IO_ERROR,
+                f"Moving image not found: {request.image_moving}"
+            )
+        
+        # Generate checkerboard preview
+        base64_data, width, height = generate_checkerboard_preview(
+            fixed_path=request.image_fixed,
+            moving_path=request.image_moving,
+            matrix_3x3=matrix,
+            board_size=request.board_size,
+            use_center_origin=request.use_center_origin
+        )
+        
+        return ApiResponse.ok(
+            data=CheckerboardPreviewResult(
+                image_base64=base64_data,
+                width=width,
+                height=height
+            )
+        )
+        
+    except Exception as e:
+        logger.exception("Unexpected error in checkerboard_preview")
         return ApiResponse.error(
             ErrorCode.INTERNAL_ERROR,
             f"Internal error: {str(e)}"

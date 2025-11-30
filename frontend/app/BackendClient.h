@@ -75,6 +75,19 @@ struct HealthCheckResult {
 };
 
 /**
+ * @brief Result of checkerboard preview request.
+ */
+struct CheckerboardPreviewResult {
+    bool success = false;
+    QString errorMessage;
+    QString errorCode;
+    
+    QString imageBase64;  // Base64-encoded PNG image
+    int width = 0;
+    int height = 0;
+};
+
+/**
  * @brief Client for communicating with the FastAPI backend.
  * 
  * Handles HTTP requests to the backend server for:
@@ -106,6 +119,11 @@ public:
                    const QString &comment = QString());
     void loadLabel(const QString &imageFixed, const QString &imageMoving);
     void listLabels();
+    void requestCheckerboardPreview(const QString &imageFixed,
+                                    const QString &imageMoving,
+                                    const QVector<QVector<double>> &matrix3x3,
+                                    int boardSize = 8,
+                                    bool useCenterOrigin = false);
 
 signals:
     void healthCheckCompleted(const HealthCheckResult &result);
@@ -113,6 +131,7 @@ signals:
     void saveLabelCompleted(const LabelSaveResult &result);
     void loadLabelCompleted(const LabelData &result);
     void listLabelsCompleted(bool success, const QList<QJsonObject> &labels, const QString &error);
+    void checkerboardPreviewCompleted(const CheckerboardPreviewResult &result);
     void networkError(const QString &message);
 
 private slots:
@@ -121,6 +140,7 @@ private slots:
     void handleSaveLabelReply();
     void handleLoadLabelReply();
     void handleListLabelsReply();
+    void handleCheckerboardPreviewReply();
 
 private:
     QNetworkRequest createRequest(const QString &endpoint) const;

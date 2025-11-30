@@ -188,6 +188,37 @@ class WarpPreviewRequest(BaseModel):
     )
 
 
+class CheckerboardPreviewRequest(BaseModel):
+    """Request body for POST /warp/checkerboard."""
+    image_fixed: str = Field(..., description="Fixed image path")
+    image_moving: str = Field(..., description="Moving image path")
+    rigid: Optional[RigidParams] = Field(
+        default=None,
+        description="Rigid parameters (alternative to matrix_3x3)"
+    )
+    matrix_3x3: Optional[List[List[float]]] = Field(
+        default=None,
+        description="3x3 transformation matrix (alternative to rigid)"
+    )
+    board_size: int = Field(
+        default=8,
+        ge=2,
+        le=64,
+        description="Number of grid cells per row/column (2-64)"
+    )
+    use_center_origin: bool = Field(
+        default=False,
+        description="If true, the matrix was computed with image center as origin"
+    )
+
+
+class CheckerboardPreviewResult(BaseModel):
+    """Result of generating a checkerboard preview."""
+    image_base64: str = Field(..., description="Base64-encoded PNG image")
+    width: int = Field(..., description="Image width in pixels")
+    height: int = Field(..., description="Image height in pixels")
+
+
 # ============================================================================
 # Error Codes
 # ============================================================================

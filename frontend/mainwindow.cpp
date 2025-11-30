@@ -4,6 +4,7 @@
 #include "model/ImagePairModel.h"
 #include "app/BackendClient.h"
 #include "app/AppConfig.h"
+#include "PreviewDialog.h"
 
 #include <QFileDialog>
 #include <QMessageBox>
@@ -24,6 +25,10 @@
 #include <QScrollBar>
 #include <QLineF>
 #include <QCoreApplication>
+#include <QGraphicsOpacityEffect>
+#include <QPropertyAnimation>
+#include <QLabel>
+#include <QTimer>
 
 // ============================================================================
 // Undo Command Classes
@@ -78,7 +83,6 @@ MainWindow::MainWindow(QWidget *parent)
     , m_zoomFactor(1.0)
     , m_fixedImageIndex(-1)
     , m_movingImageIndex(-1)
-    , m_gtExportCounter(0)
     , m_isPanning(false)
     , m_isSelecting(false)
     , m_fixedRubberBand(nullptr)
@@ -86,8 +90,18 @@ MainWindow::MainWindow(QWidget *parent)
     , m_undoStack(new QUndoStack(this))
     , m_translator(new QTranslator(this))
     , m_currentLanguage("en")
+    , m_realtimeComputeTimer(new QTimer(this))
+    , m_realtimeComputeEnabled(false)
+    , m_realtimeComputePending(false)
+    , m_useTopLeftOrigin(false)  // Default: use image center as origin
+    , m_previewDialog(nullptr)
+    , m_currentPreviewGridSize(8)
 {
     ui->setupUi(this);
+    
+    // Initialize real-time compute timer (10 seconds)
+    m_realtimeComputeTimer->setSingleShot(true);
+    m_realtimeComputeTimer->setInterval(10000);  // 10 seconds
     
     // Initialize color palette for point pairs (distinct, easily visible colors)
     m_pointColors << QColor(255, 0, 0)      // Red
@@ -189,23 +203,36 @@ void MainWindow::setupConnections()
     // Panel buttons
     connect(ui->btnLoadFixed, &QPushButton::clicked, this, &MainWindow::loadFixedImage);
     connect(ui->btnLoadMoving, &QPushButton::clicked, this, &MainWindow::loadMovingImage);
+    connect(ui->btnPrevFixed, &QPushButton::clicked, this, &MainWindow::prevFixedImage);
     connect(ui->btnNextFixed, &QPushButton::clicked, this, &MainWindow::nextFixedImage);
+    connect(ui->btnPrevMoving, &QPushButton::clicked, this, &MainWindow::prevMovingImage);
     connect(ui->btnNextMoving, &QPushButton::clicked, this, &MainWindow::nextMovingImage);
+    connect(ui->btnPrevPair, &QPushButton::clicked, this, &MainWindow::prevPair);
     connect(ui->btnNextPair, &QPushButton::clicked, this, &MainWindow::nextPair);
     connect(ui->btnZoomFitFixed, &QPushButton::clicked, this, &MainWindow::zoomToFit);
     connect(ui->btnZoomFitMoving, &QPushButton::clicked, this, &MainWindow::zoomToFit);
     connect(ui->btnAddPoint, &QPushButton::clicked, this, &MainWindow::addTiePoint);
     connect(ui->btnDeletePoint, &QPushButton::clicked, this, &MainWindow::deleteSelectedTiePoint);
     connect(ui->btnClearPoints, &QPushButton::clicked, this, &MainWindow::clearAllTiePoints);
+    connect(ui->btnExportPoints, &QPushButton::clicked, this, &MainWindow::exportTiePoints);
+    connect(ui->btnImportPoints, &QPushButton::clicked, this, &MainWindow::importTiePoints);
     connect(ui->btnCompute, &QPushButton::clicked, this, &MainWindow::computeTransform);
     connect(ui->btnSaveLabel, &QPushButton::clicked, this, &MainWindow::saveLabel);
     connect(ui->btnLoadLabel, &QPushButton::clicked, this, &MainWindow::loadLabel);
     connect(ui->btnPreview, &QPushButton::clicked, this, &MainWindow::previewWarp);
-    connect(ui->btnExportGT, &QPushButton::clicked, this, &MainWindow::exportToGTFolder);
+    connect(ui->btnExportMatrix, &QPushButton::clicked, this, &MainWindow::exportMatrix);
     
     // Options
+    connect(ui->chkOriginTopLeft, &QCheckBox::toggled, this, &MainWindow::onOriginModeToggled);
     connect(ui->chkShowOverlay, &QCheckBox::toggled, this, &MainWindow::onOverlayToggled);
     connect(ui->sliderOpacity, &QSlider::valueChanged, this, &MainWindow::onOpacityChanged);
+    connect(ui->chkRealtimeCompute, &QCheckBox::toggled, this, &MainWindow::onRealtimeComputeToggled);
+    
+    // Real-time compute timer
+    connect(m_realtimeComputeTimer, &QTimer::timeout, this, &MainWindow::onRealtimeComputeTimeout);
+    
+    // Tie point model - pair completed signal for real-time compute
+    connect(m_tiePointModel, &TiePointModel::pairCompleted, this, &MainWindow::onPairCompleted);
     
     // Tie point table selection
     connect(ui->tiePointsTable->selectionModel(), &QItemSelectionModel::selectionChanged,
@@ -226,6 +253,7 @@ void MainWindow::setupConnections()
     connect(m_backendClient, &BackendClient::computeRigidCompleted, this, &MainWindow::onComputeRigidCompleted);
     connect(m_backendClient, &BackendClient::saveLabelCompleted, this, &MainWindow::onSaveLabelCompleted);
     connect(m_backendClient, &BackendClient::loadLabelCompleted, this, &MainWindow::onLoadLabelCompleted);
+    connect(m_backendClient, &BackendClient::checkerboardPreviewCompleted, this, &MainWindow::onCheckerboardPreviewCompleted);
 }
 
 bool MainWindow::eventFilter(QObject *obj, QEvent *event)
@@ -443,6 +471,11 @@ void MainWindow::loadFixedImage()
         m_fixedImageDir = fi.absolutePath();
         m_fixedImageFiles = getImageFilesInDir(m_fixedImageDir);
         m_fixedImageIndex = m_fixedImageFiles.indexOf(fi.fileName());
+        // Update filename label
+        ui->lblFixedFileName->setText(tr("%1 (%2/%3)")
+            .arg(fi.fileName())
+            .arg(m_fixedImageIndex + 1)
+            .arg(m_fixedImageFiles.size()));
         statusBar()->showMessage(tr("Fixed image loaded: %1").arg(fileName), 3000);
     } else {
         showError(tr("Error"), tr("Failed to load fixed image."));
@@ -470,6 +503,11 @@ void MainWindow::loadMovingImage()
         m_movingImageDir = fi.absolutePath();
         m_movingImageFiles = getImageFilesInDir(m_movingImageDir);
         m_movingImageIndex = m_movingImageFiles.indexOf(fi.fileName());
+        // Update filename label
+        ui->lblMovingFileName->setText(tr("%1 (%2/%3)")
+            .arg(fi.fileName())
+            .arg(m_movingImageIndex + 1)
+            .arg(m_movingImageFiles.size()));
         statusBar()->showMessage(tr("Moving image loaded: %1").arg(fileName), 3000);
     } else {
         showError(tr("Error"), tr("Failed to load moving image."));
@@ -566,10 +604,38 @@ void MainWindow::computeTransform()
         return;
     }
     
-    // Collect complete tie points only
+    // Get image centers for coordinate conversion
+    double fixedCenterX = 0, fixedCenterY = 0;
+    double movingCenterX = 0, movingCenterY = 0;
+    
+    if (!m_useTopLeftOrigin) {
+        if (m_fixedPixmapItem) {
+            QPixmap pm = m_fixedPixmapItem->pixmap();
+            fixedCenterX = pm.width() / 2.0;
+            fixedCenterY = pm.height() / 2.0;
+        }
+        if (m_movingPixmapItem) {
+            QPixmap pm = m_movingPixmapItem->pixmap();
+            movingCenterX = pm.width() / 2.0;
+            movingCenterY = pm.height() / 2.0;
+        }
+    }
+    
+    // Collect complete tie points only, converting to appropriate coordinate system
     QList<QPair<QPointF, QPointF>> tiePoints;
     for (const TiePoint &tp : m_tiePointModel->getAllTiePoints()) {
-        tiePoints.append({tp.fixed, tp.moving});
+        QPointF fixed = tp.fixed;
+        QPointF moving = tp.moving;
+        
+        // Convert to center-origin coordinates if needed
+        if (!m_useTopLeftOrigin) {
+            fixed.setX(fixed.x() - fixedCenterX);
+            fixed.setY(fixed.y() - fixedCenterY);
+            moving.setX(moving.x() - movingCenterX);
+            moving.setY(moving.y() - movingCenterY);
+        }
+        
+        tiePoints.append({fixed, moving});
     }
     
     m_backendClient->computeRigid(
@@ -588,8 +654,41 @@ void MainWindow::previewWarp()
         return;
     }
     
-    // TODO: Implement warp preview using backend /warp/preview endpoint
-    statusBar()->showMessage(tr("Preview warp - not yet implemented."), 3000);
+    // Check if images are loaded
+    if (m_imagePairModel->fixedImagePath().isEmpty() || 
+        m_imagePairModel->movingImagePath().isEmpty()) {
+        showError(tr("Error"), tr("Please load both fixed and moving images first."));
+        return;
+    }
+    
+    // Create preview dialog if not exists
+    if (!m_previewDialog) {
+        m_previewDialog = new PreviewDialog(this);
+        connect(m_previewDialog, &PreviewDialog::refreshRequested, 
+                this, &MainWindow::onPreviewRefreshRequested);
+    }
+    
+    // Set initial grid size
+    m_previewDialog->setGridSize(m_currentPreviewGridSize);
+    
+    // Show loading state
+    m_previewDialog->showLoading();
+    m_previewDialog->show();
+    m_previewDialog->raise();
+    m_previewDialog->activateWindow();
+    
+    // Request checkerboard preview from backend
+    // Note: use_center_origin should be true when m_useTopLeftOrigin is false
+    // because the matrix was computed with center origin when m_useTopLeftOrigin is false
+    m_backendClient->requestCheckerboardPreview(
+        m_imagePairModel->fixedImagePath(),
+        m_imagePairModel->movingImagePath(),
+        m_currentMatrix,
+        m_currentPreviewGridSize,
+        !m_useTopLeftOrigin  // use_center_origin = !m_useTopLeftOrigin
+    );
+    
+    statusBar()->showMessage(tr("Generating checkerboard preview..."), 3000);
 }
 
 // ============================================================================
@@ -708,7 +807,9 @@ void MainWindow::onFixedViewClicked(const QPointF &pos)
     // Add fixed point to model (model handles internal undo stack)
     int index = m_tiePointModel->addFixedPoint(pos);
     
-    ui->lblFixedCoord->setText(tr("X: %1, Y: %2").arg(pos.x(), 0, 'f', 1).arg(pos.y(), 0, 'f', 1));
+    // Display coordinates in current coordinate system
+    ui->lblFixedCoord->setText(formatDisplayCoord(pos, true));
+    QPointF displayPos = pixelToDisplayCoord(pos, true);
     
     // Update display
     updatePointDisplay();
@@ -717,11 +818,11 @@ void MainWindow::onFixedViewClicked(const QPointF &pos)
     // Check if this completes a pair
     if (m_tiePointModel->hasBothPoints(index)) {
         statusBar()->showMessage(tr("Fixed point added at (%1, %2). Pair #%3 complete!")
-            .arg(pos.x(), 0, 'f', 1).arg(pos.y(), 0, 'f', 1).arg(index + 1), 3000);
+            .arg(displayPos.x(), 0, 'f', 1).arg(displayPos.y(), 0, 'f', 1).arg(index + 1), 3000);
         m_hasValidTransform = false;
     } else {
         statusBar()->showMessage(tr("Fixed point added at (%1, %2). Now add moving point for pair #%3.")
-            .arg(pos.x(), 0, 'f', 1).arg(pos.y(), 0, 'f', 1).arg(index + 1), 5000);
+            .arg(displayPos.x(), 0, 'f', 1).arg(displayPos.y(), 0, 'f', 1).arg(index + 1), 5000);
     }
 }
 
@@ -733,7 +834,9 @@ void MainWindow::onMovingViewClicked(const QPointF &pos)
     // Add moving point to model (model handles internal undo stack)
     int index = m_tiePointModel->addMovingPoint(pos);
     
-    ui->lblMovingCoord->setText(tr("X: %1, Y: %2").arg(pos.x(), 0, 'f', 1).arg(pos.y(), 0, 'f', 1));
+    // Display coordinates in current coordinate system
+    ui->lblMovingCoord->setText(formatDisplayCoord(pos, false));
+    QPointF displayPos = pixelToDisplayCoord(pos, false);
     
     // Update display
     updatePointDisplay();
@@ -742,11 +845,11 @@ void MainWindow::onMovingViewClicked(const QPointF &pos)
     // Check if this completes a pair
     if (m_tiePointModel->hasBothPoints(index)) {
         statusBar()->showMessage(tr("Moving point added at (%1, %2). Pair #%3 complete!")
-            .arg(pos.x(), 0, 'f', 1).arg(pos.y(), 0, 'f', 1).arg(index + 1), 3000);
+            .arg(displayPos.x(), 0, 'f', 1).arg(displayPos.y(), 0, 'f', 1).arg(index + 1), 3000);
         m_hasValidTransform = false;
     } else {
         statusBar()->showMessage(tr("Moving point added at (%1, %2). Now add fixed point for pair #%3.")
-            .arg(pos.x(), 0, 'f', 1).arg(pos.y(), 0, 'f', 1).arg(index + 1), 5000);
+            .arg(displayPos.x(), 0, 'f', 1).arg(displayPos.y(), 0, 'f', 1).arg(index + 1), 5000);
     }
 }
 
@@ -864,6 +967,54 @@ void MainWindow::onLoadLabelCompleted(const LabelData &result)
     updateActionStates();
 }
 
+void MainWindow::onCheckerboardPreviewCompleted(const CheckerboardPreviewResult &result)
+{
+    if (!m_previewDialog) {
+        return;
+    }
+    
+    if (!result.success) {
+        m_previewDialog->showError(result.errorMessage);
+        statusBar()->showMessage(tr("Preview generation failed: %1").arg(result.errorMessage), 5000);
+        return;
+    }
+    
+    // Update preview dialog with the image
+    if (m_previewDialog->setImageFromBase64(result.imageBase64, result.width, result.height)) {
+        statusBar()->showMessage(tr("Checkerboard preview generated."), 3000);
+    } else {
+        m_previewDialog->showError(tr("Failed to decode preview image"));
+    }
+}
+
+void MainWindow::onPreviewRefreshRequested(int gridSize)
+{
+    if (!m_hasValidTransform) {
+        if (m_previewDialog) {
+            m_previewDialog->showError(tr("No valid transform available"));
+        }
+        return;
+    }
+    
+    m_currentPreviewGridSize = gridSize;
+    
+    // Show loading state
+    if (m_previewDialog) {
+        m_previewDialog->showLoading();
+    }
+    
+    // Request new preview with updated grid size
+    m_backendClient->requestCheckerboardPreview(
+        m_imagePairModel->fixedImagePath(),
+        m_imagePairModel->movingImagePath(),
+        m_currentMatrix,
+        gridSize,
+        !m_useTopLeftOrigin  // use_center_origin = !m_useTopLeftOrigin
+    );
+    
+    statusBar()->showMessage(tr("Refreshing preview with grid size %1...").arg(gridSize), 2000);
+}
+
 // ============================================================================
 // About Dialog
 // ============================================================================
@@ -908,6 +1059,9 @@ void MainWindow::updateImageViews()
         m_movingPixmapItem = m_movingScene->addPixmap(QPixmap::fromImage(m_imagePairModel->movingImage()));
         ui->movingImageView->fitInView(m_movingPixmapItem, Qt::KeepAspectRatio);
     }
+    
+    // Update coordinate offsets for TiePointModel display
+    updateTiePointModelCoordinateOffsets();
     
     updateActionStates();
 }
@@ -1101,14 +1255,53 @@ void MainWindow::updateActionStates()
     ui->btnAddPoint->setEnabled(hasBothImages);
     ui->btnDeletePoint->setEnabled(totalCount > 0);
     ui->btnClearPoints->setEnabled(totalCount > 0);
+    ui->btnExportPoints->setEnabled(m_tiePointModel->completePairCount() > 0);
+    ui->btnImportPoints->setEnabled(hasBothImages);
     
     // Navigation buttons
+    ui->btnPrevFixed->setEnabled(m_fixedImageIndex > 0);
     ui->btnNextFixed->setEnabled(m_fixedImageIndex >= 0 && m_fixedImageIndex < m_fixedImageFiles.size() - 1);
+    ui->btnPrevMoving->setEnabled(m_movingImageIndex > 0);
     ui->btnNextMoving->setEnabled(m_movingImageIndex >= 0 && m_movingImageIndex < m_movingImageFiles.size() - 1);
+    ui->btnPrevPair->setEnabled(ui->btnPrevFixed->isEnabled() || ui->btnPrevMoving->isEnabled());
     ui->btnNextPair->setEnabled(ui->btnNextFixed->isEnabled() || ui->btnNextMoving->isEnabled());
     
-    // GT export button
-    ui->btnExportGT->setEnabled(m_hasValidTransform);
+    // Matrix export button
+    ui->btnExportMatrix->setEnabled(m_hasValidTransform);
+    
+    // Real-time compute mode - enable checkbox only when 3+ complete pairs
+    updateRealtimeComputeState();
+}
+
+// ============================================================================
+// Coordinate Conversion Helpers
+// ============================================================================
+
+QPointF MainWindow::pixelToDisplayCoord(const QPointF &pixelPos, bool isFixed) const
+{
+    if (m_useTopLeftOrigin) {
+        return pixelPos;
+    }
+    
+    // Convert to center-origin coordinates
+    double centerX = 0, centerY = 0;
+    if (isFixed && m_fixedPixmapItem) {
+        QPixmap pm = m_fixedPixmapItem->pixmap();
+        centerX = pm.width() / 2.0;
+        centerY = pm.height() / 2.0;
+    } else if (!isFixed && m_movingPixmapItem) {
+        QPixmap pm = m_movingPixmapItem->pixmap();
+        centerX = pm.width() / 2.0;
+        centerY = pm.height() / 2.0;
+    }
+    
+    return QPointF(pixelPos.x() - centerX, pixelPos.y() - centerY);
+}
+
+QString MainWindow::formatDisplayCoord(const QPointF &pixelPos, bool isFixed) const
+{
+    QPointF displayPos = pixelToDisplayCoord(pixelPos, isFixed);
+    return tr("X: %1, Y: %2").arg(displayPos.x(), 0, 'f', 1).arg(displayPos.y(), 0, 'f', 1);
 }
 
 void MainWindow::showError(const QString &title, const QString &message)
@@ -1119,6 +1312,49 @@ void MainWindow::showError(const QString &title, const QString &message)
 void MainWindow::showInfo(const QString &title, const QString &message)
 {
     QMessageBox::information(this, title, message);
+}
+
+void MainWindow::showSuccessToast(const QString &message, int durationMs)
+{
+    // Create a frameless, translucent message box
+    QLabel *toast = new QLabel(this);
+    toast->setText("✓ " + message);
+    toast->setStyleSheet(
+        "QLabel {"
+        "  background-color: rgba(76, 175, 80, 220);"
+        "  color: white;"
+        "  padding: 12px 24px;"
+        "  border-radius: 8px;"
+        "  font-size: 14px;"
+        "  font-weight: bold;"
+        "}"
+    );
+    toast->setAlignment(Qt::AlignCenter);
+    toast->adjustSize();
+    
+    // Position at center-top of the window
+    int x = (width() - toast->width()) / 2;
+    int y = 80;
+    toast->move(x, y);
+    toast->show();
+    
+    // Fade out animation
+    QGraphicsOpacityEffect *effect = new QGraphicsOpacityEffect(toast);
+    toast->setGraphicsEffect(effect);
+    
+    QPropertyAnimation *animation = new QPropertyAnimation(effect, "opacity");
+    animation->setDuration(500);
+    animation->setStartValue(1.0);
+    animation->setEndValue(0.0);
+    animation->setEasingCurve(QEasingCurve::InQuad);
+    
+    // Start fade after delay
+    QTimer::singleShot(durationMs - 500, [animation]() {
+        animation->start();
+    });
+    
+    // Delete toast after animation
+    connect(animation, &QPropertyAnimation::finished, toast, &QLabel::deleteLater);
 }
 
 // ============================================================================
@@ -1142,6 +1378,11 @@ void MainWindow::loadFixedImageByIndex(int index)
     QString fileName = m_fixedImageDir + "/" + m_fixedImageFiles[index];
     if (m_imagePairModel->loadFixedImage(fileName)) {
         m_fixedImageIndex = index;
+        // Update filename label
+        ui->lblFixedFileName->setText(tr("%1 (%2/%3)")
+            .arg(m_fixedImageFiles[index])
+            .arg(index + 1)
+            .arg(m_fixedImageFiles.size()));
         statusBar()->showMessage(tr("Fixed image loaded: %1 (%2/%3)")
             .arg(m_fixedImageFiles[index])
             .arg(index + 1)
@@ -1160,6 +1401,11 @@ void MainWindow::loadMovingImageByIndex(int index)
     QString fileName = m_movingImageDir + "/" + m_movingImageFiles[index];
     if (m_imagePairModel->loadMovingImage(fileName)) {
         m_movingImageIndex = index;
+        // Update filename label
+        ui->lblMovingFileName->setText(tr("%1 (%2/%3)")
+            .arg(m_movingImageFiles[index])
+            .arg(index + 1)
+            .arg(m_movingImageFiles.size()));
         statusBar()->showMessage(tr("Moving image loaded: %1 (%2/%3)")
             .arg(m_movingImageFiles[index])
             .arg(index + 1)
@@ -1170,6 +1416,14 @@ void MainWindow::loadMovingImageByIndex(int index)
     updateActionStates();
 }
 
+void MainWindow::prevFixedImage()
+{
+    if (m_fixedImageIndex <= 0)
+        return;
+    
+    loadFixedImageByIndex(m_fixedImageIndex - 1);
+}
+
 void MainWindow::nextFixedImage()
 {
     if (m_fixedImageIndex < 0 || m_fixedImageIndex >= m_fixedImageFiles.size() - 1)
@@ -1178,12 +1432,31 @@ void MainWindow::nextFixedImage()
     loadFixedImageByIndex(m_fixedImageIndex + 1);
 }
 
+void MainWindow::prevMovingImage()
+{
+    if (m_movingImageIndex <= 0)
+        return;
+    
+    loadMovingImageByIndex(m_movingImageIndex - 1);
+}
+
 void MainWindow::nextMovingImage()
 {
     if (m_movingImageIndex < 0 || m_movingImageIndex >= m_movingImageFiles.size() - 1)
         return;
     
     loadMovingImageByIndex(m_movingImageIndex + 1);
+}
+
+void MainWindow::prevPair()
+{
+    // Clear current tie points and transform
+    m_tiePointModel->clearAll();
+    m_hasValidTransform = false;
+    ui->txtResult->clear();
+    
+    prevFixedImage();
+    prevMovingImage();
 }
 
 void MainWindow::nextPair()
@@ -1195,76 +1468,6 @@ void MainWindow::nextPair()
     
     nextFixedImage();
     nextMovingImage();
-}
-
-// ============================================================================
-// GT Export
-// ============================================================================
-
-void MainWindow::exportToGTFolder()
-{
-    if (!m_hasValidTransform) {
-        showError(tr("Error"), tr("No valid transform to export. Compute transform first."));
-        return;
-    }
-    
-    // First time: select root folder
-    if (m_gtExportRootDir.isEmpty()) {
-        QString dir = QFileDialog::getExistingDirectory(this,
-            tr("Select GT Export Root Folder"),
-            AppConfig::instance().lastGTExportDir(),
-            QFileDialog::ShowDirsOnly);
-        
-        if (dir.isEmpty())
-            return;
-        
-        m_gtExportRootDir = dir;
-        m_gtExportCounter = 0;
-        AppConfig::instance().setLastGTExportDir(dir);
-    }
-    
-    // Create GT subfolder if it doesn't exist
-    QString gtFolderPath = m_gtExportRootDir + "/GT";
-    QDir gtDir(gtFolderPath);
-    if (!gtDir.exists()) {
-        if (!gtDir.mkpath(".")) {
-            showError(tr("Error"), tr("Failed to create GT folder: %1").arg(gtFolderPath));
-            return;
-        }
-    }
-    
-    // Find next available counter
-    while (QFile::exists(gtFolderPath + QString("/%1.txt").arg(m_gtExportCounter, 4, 10, QChar('0')))) {
-        m_gtExportCounter++;
-    }
-    
-    // Write 3x3 matrix to txt file
-    QString fileName = gtFolderPath + QString("/%1.txt").arg(m_gtExportCounter, 4, 10, QChar('0'));
-    QFile file(fileName);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        showError(tr("Error"), tr("Failed to create file: %1").arg(fileName));
-        return;
-    }
-    
-    QTextStream out(&file);
-    out.setRealNumberPrecision(10);
-    for (int i = 0; i < 3; ++i) {
-        out << m_currentMatrix[i][0] << " " << m_currentMatrix[i][1] << " " << m_currentMatrix[i][2] << "\n";
-    }
-    file.close();
-    
-    statusBar()->showMessage(tr("Exported to: %1").arg(fileName), 3000);
-    m_gtExportCounter++;
-    
-    // Auto-advance to next pair if possible
-    if (ui->btnNextPair->isEnabled()) {
-        int ret = QMessageBox::question(this, tr("Next Pair?"),
-            tr("Matrix exported successfully. Load next image pair?"),
-            QMessageBox::Yes | QMessageBox::No);
-        if (ret == QMessageBox::Yes) {
-            nextPair();
-        }
-    }
 }
 
 // ============================================================================
@@ -1432,4 +1635,342 @@ void MainWindow::switchToChinese()
     ui->lblPointCount->setText(tr("Points: %1 (min 2 required)").arg(m_tiePointModel->count()));
     
     statusBar()->showMessage(tr("Language switched to Chinese"), 2000);
+}
+
+// ============================================================================
+// Real-time Compute Mode
+// ============================================================================
+
+void MainWindow::onRealtimeComputeToggled(bool enabled)
+{
+    m_realtimeComputeEnabled = enabled;
+    
+    if (enabled) {
+        statusBar()->showMessage(tr("Real-time compute mode enabled. Transform will auto-compute 10s after adding a pair."), 3000);
+    } else {
+        // Stop any pending timer
+        m_realtimeComputeTimer->stop();
+        m_realtimeComputePending = false;
+        statusBar()->showMessage(tr("Real-time compute mode disabled."), 2000);
+    }
+}
+
+void MainWindow::onRealtimeComputeTimeout()
+{
+    if (!m_realtimeComputeEnabled || !m_realtimeComputePending)
+        return;
+    
+    m_realtimeComputePending = false;
+    
+    // Check if we still have enough points
+    int pointCount = m_tiePointModel->completePairCount();
+    if (pointCount >= 3) {
+        statusBar()->showMessage(tr("Auto-computing transform..."), 2000);
+        computeTransform();
+    }
+}
+
+void MainWindow::onPairCompleted(int pairIndex)
+{
+    Q_UNUSED(pairIndex);
+    
+    // If real-time compute mode is enabled and we have 3+ pairs, start timer
+    if (m_realtimeComputeEnabled) {
+        int pointCount = m_tiePointModel->completePairCount();
+        if (pointCount >= 3) {
+            // Restart the timer (resets the 10s countdown)
+            m_realtimeComputeTimer->start();
+            m_realtimeComputePending = true;
+            statusBar()->showMessage(tr("Pair #%1 complete. Auto-compute in 10 seconds...").arg(pairIndex + 1), 3000);
+        }
+    }
+}
+
+void MainWindow::updateRealtimeComputeState()
+{
+    int pointCount = m_tiePointModel->completePairCount();
+    bool canEnable = pointCount >= 3;
+    
+    // Enable/disable the checkbox based on point count
+    ui->chkRealtimeCompute->setEnabled(canEnable);
+    
+    // If we drop below 3 points while enabled, auto-disable
+    if (!canEnable && m_realtimeComputeEnabled) {
+        ui->chkRealtimeCompute->setChecked(false);
+        m_realtimeComputeEnabled = false;
+        m_realtimeComputeTimer->stop();
+        m_realtimeComputePending = false;
+        statusBar()->showMessage(tr("Real-time compute mode auto-disabled (less than 3 complete pairs)."), 3000);
+    }
+}
+
+// ============================================================================
+// Matrix Export
+// ============================================================================
+
+void MainWindow::exportMatrix()
+{
+    if (!m_hasValidTransform) {
+        showError(tr("Error"), tr("No valid transform to export. Compute transform first."));
+        return;
+    }
+    
+    // First time: ask user to select a folder
+    if (m_matrixExportDir.isEmpty()) {
+        QString dir = QFileDialog::getExistingDirectory(
+            this,
+            tr("Select Matrix Export Folder"),
+            QString(),
+            QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks
+        );
+        
+        if (dir.isEmpty())
+            return;
+        
+        m_matrixExportDir = dir;
+    }
+    
+    // Get filename from fixed image name
+    QString fixedPath = m_imagePairModel->fixedImagePath();
+    QString baseName;
+    if (!fixedPath.isEmpty()) {
+        QFileInfo fi(fixedPath);
+        baseName = fi.baseName();
+    } else {
+        baseName = "matrix";
+    }
+    
+    QString filePath = m_matrixExportDir + "/" + baseName + ".txt";
+    
+    QFile file(filePath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        showError(tr("Error"), tr("Failed to create file: %1").arg(filePath));
+        return;
+    }
+    
+    QTextStream out(&file);
+    out.setRealNumberPrecision(10);
+    
+    // Write 3x3 matrix (space-separated values, one row per line)
+    for (int i = 0; i < 3; ++i) {
+        out << m_currentMatrix[i][0] << " " << m_currentMatrix[i][1] << " " << m_currentMatrix[i][2] << "\n";
+    }
+    
+    file.close();
+    showSuccessToast(tr("Saved successfully"));
+}
+
+// ============================================================================
+// Tie Point Import/Export
+// ============================================================================
+
+void MainWindow::exportTiePoints()
+{
+    if (m_tiePointModel->completePairCount() == 0) {
+        showError(tr("Export Error"), tr("No complete tie points to export."));
+        return;
+    }
+    
+    // Default filename from fixed image
+    QString defaultFileName;
+    QString fixedPath = m_imagePairModel->fixedImagePath();
+    if (!fixedPath.isEmpty()) {
+        QFileInfo fi(fixedPath);
+        defaultFileName = fi.baseName() + ".csv";
+    }
+    
+    QString fileName = QFileDialog::getSaveFileName(
+        this,
+        tr("Export Tie Points"),
+        defaultFileName,
+        tr("CSV Files (*.csv);;All Files (*)")
+    );
+    
+    if (fileName.isEmpty())
+        return;
+    
+    QFile file(fileName);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        showError(tr("Export Error"), tr("Cannot open file for writing: %1").arg(fileName));
+        return;
+    }
+    
+    QTextStream out(&file);
+    
+    // Get image dimensions for center origin conversion
+    double fixedCenterX = 0, fixedCenterY = 0;
+    double movingCenterX = 0, movingCenterY = 0;
+    
+    if (m_fixedPixmapItem) {
+        QPixmap pm = m_fixedPixmapItem->pixmap();
+        fixedCenterX = pm.width() / 2.0;
+        fixedCenterY = pm.height() / 2.0;
+    }
+    if (m_movingPixmapItem) {
+        QPixmap pm = m_movingPixmapItem->pixmap();
+        movingCenterX = pm.width() / 2.0;
+        movingCenterY = pm.height() / 2.0;
+    }
+    
+    // Write header with origin mode info
+    out << "# Tie Points Export\n";
+    out << "# Origin Mode: " << (m_useTopLeftOrigin ? "TopLeft" : "Center") << "\n";
+    if (!m_useTopLeftOrigin) {
+        out << "# Fixed Image Center: " << fixedCenterX << ", " << fixedCenterY << "\n";
+        out << "# Moving Image Center: " << movingCenterX << ", " << movingCenterY << "\n";
+    }
+    out << "# Format: index, fixed_x, fixed_y, moving_x, moving_y\n";
+    
+    QList<TiePointPair> pairs = m_tiePointModel->getCompletePairs();
+    int index = 1;
+    for (const TiePointPair &pair : pairs) {
+        double fx = pair.fixed->x();
+        double fy = pair.fixed->y();
+        double mx = pair.moving->x();
+        double my = pair.moving->y();
+        
+        // Convert to center origin if needed
+        if (!m_useTopLeftOrigin) {
+            fx -= fixedCenterX;
+            fy -= fixedCenterY;
+            mx -= movingCenterX;
+            my -= movingCenterY;
+        }
+        
+        out << index << "," << fx << "," << fy << "," << mx << "," << my << "\n";
+        index++;
+    }
+    
+    file.close();
+    statusBar()->showMessage(tr("Exported %1 tie points to %2").arg(pairs.size()).arg(fileName), 3000);
+}
+
+void MainWindow::importTiePoints()
+{
+    QString fileName = QFileDialog::getOpenFileName(
+        this,
+        tr("Import Tie Points"),
+        QString(),
+        tr("CSV Files (*.csv);;All Files (*)")
+    );
+    
+    if (fileName.isEmpty())
+        return;
+    
+    QFile file(fileName);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        showError(tr("Import Error"), tr("Cannot open file for reading: %1").arg(fileName));
+        return;
+    }
+    
+    // Get image dimensions for center origin conversion
+    double fixedCenterX = 0, fixedCenterY = 0;
+    double movingCenterX = 0, movingCenterY = 0;
+    
+    if (m_fixedPixmapItem) {
+        QPixmap pm = m_fixedPixmapItem->pixmap();
+        fixedCenterX = pm.width() / 2.0;
+        fixedCenterY = pm.height() / 2.0;
+    }
+    if (m_movingPixmapItem) {
+        QPixmap pm = m_movingPixmapItem->pixmap();
+        movingCenterX = pm.width() / 2.0;
+        movingCenterY = pm.height() / 2.0;
+    }
+    
+    QTextStream in(&file);
+    int importedCount = 0;
+    bool fileUsesCenter = false;  // Detect from file header
+    bool hasOriginInfo = false;
+    
+    while (!in.atEnd()) {
+        QString line = in.readLine().trimmed();
+        
+        // Skip empty lines
+        if (line.isEmpty())
+            continue;
+        
+        // Parse header comments
+        if (line.startsWith('#')) {
+            if (line.contains("Origin Mode:")) {
+                hasOriginInfo = true;
+                fileUsesCenter = line.contains("Center");
+            }
+            continue;
+        }
+        
+        // Parse data line: index, fixed_x, fixed_y, moving_x, moving_y
+        QStringList parts = line.split(',');
+        if (parts.size() < 5)
+            continue;
+        
+        bool ok1, ok2, ok3, ok4;
+        double fx = parts[1].trimmed().toDouble(&ok1);
+        double fy = parts[2].trimmed().toDouble(&ok2);
+        double mx = parts[3].trimmed().toDouble(&ok3);
+        double my = parts[4].trimmed().toDouble(&ok4);
+        
+        if (!ok1 || !ok2 || !ok3 || !ok4)
+            continue;
+        
+        // Convert coordinates based on file origin mode and current mode
+        // File uses center origin -> convert to pixel coords if current mode is top-left
+        // File uses top-left origin -> convert to center coords if current mode is center
+        if (hasOriginInfo && fileUsesCenter) {
+            // File is in center coords, convert to top-left (pixel) coords first
+            fx += fixedCenterX;
+            fy += fixedCenterY;
+            mx += movingCenterX;
+            my += movingCenterY;
+        }
+        
+        // Now fx, fy, mx, my are in pixel (top-left) coordinates
+        // Add the point to model (model always stores in pixel coords)
+        m_tiePointModel->addTiePoint(QPointF(fx, fy), QPointF(mx, my));
+        importedCount++;
+    }
+    
+    file.close();
+    
+    if (importedCount > 0) {
+        updatePointDisplay();
+        updateActionStates();
+        statusBar()->showMessage(tr("Imported %1 tie points from %2").arg(importedCount).arg(fileName), 3000);
+    } else {
+        showError(tr("Import Error"), tr("No valid tie points found in file."));
+    }
+}
+
+void MainWindow::onOriginModeToggled(bool topLeftOrigin)
+{
+    m_useTopLeftOrigin = topLeftOrigin;
+    
+    // Update TiePointModel's display mode
+    m_tiePointModel->setUseTopLeftOrigin(topLeftOrigin);
+    
+    if (topLeftOrigin) {
+        statusBar()->showMessage(tr("Coordinate origin: Top-left corner (0,0)"), 2000);
+    } else {
+        statusBar()->showMessage(tr("Coordinate origin: Image center (0,0)"), 2000);
+    }
+    
+    // Note: Internal storage is always in pixel coords, only display/export changes
+}
+
+void MainWindow::updateTiePointModelCoordinateOffsets()
+{
+    QPointF fixedOffset(0, 0);
+    QPointF movingOffset(0, 0);
+    
+    if (m_fixedPixmapItem) {
+        QPixmap pm = m_fixedPixmapItem->pixmap();
+        fixedOffset = QPointF(pm.width() / 2.0, pm.height() / 2.0);
+    }
+    
+    if (m_movingPixmapItem) {
+        QPixmap pm = m_movingPixmapItem->pixmap();
+        movingOffset = QPointF(pm.width() / 2.0, pm.height() / 2.0);
+    }
+    
+    m_tiePointModel->setDisplayCoordinateOffset(fixedOffset, movingOffset);
 }

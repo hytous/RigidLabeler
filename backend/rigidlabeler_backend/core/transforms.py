@@ -1,11 +1,17 @@
 """
 2D Rigid Transformation Estimation.
 
-Implements Procrustes analysis using SVD to estimate rigid (or similarity)
+Implements Kabsch/Procrustes analysis using SVD to estimate rigid (or similarity)
 transformations between point sets.
 
 The transformation maps points from the moving image to the fixed image:
     p_fixed = scale * R(theta) * p_moving + [tx, ty]
+
+Coordinate convention:
+- When using center-origin coordinates (default), points are relative to their
+  respective image centers.
+- The computed transformation matrix T satisfies: [x'; y'; 1]^T = T @ [x; y; 1]^T
+  where (x, y) are moving image coordinates and (x', y') are fixed image coordinates.
 """
 
 import numpy as np
@@ -38,14 +44,16 @@ def compute_rigid_transform(
     moving_points: np.ndarray,
     allow_scale: bool = False
 ) -> RigidTransformResult:
-    """Estimate 2D rigid (or similarity) transformation using Procrustes analysis.
+    """Estimate 2D rigid (or similarity) transformation using Kabsch algorithm.
     
     Uses centroid alignment + SVD to find the optimal rotation and translation
     that maps moving_points to fixed_points.
     
+    The transformation satisfies: p_fixed = s * R * p_moving + t
+    
     Args:
-        fixed_points: Nx2 array of points in the fixed image.
-        moving_points: Nx2 array of corresponding points in the moving image.
+        fixed_points: Nx2 array of points in the fixed image (destination).
+        moving_points: Nx2 array of corresponding points in the moving image (source).
         allow_scale: If True, also estimate uniform scale (similarity transform).
         
     Returns:
@@ -69,26 +77,27 @@ def compute_rigid_transform(
         )
     
     # Convert to numpy arrays if needed
-    fixed_pts = np.asarray(fixed_points, dtype=np.float64)
-    moving_pts = np.asarray(moving_points, dtype=np.float64)
+    src_pts = np.asarray(moving_points, dtype=np.float64)  # Source (moving)
+    dst_pts = np.asarray(fixed_points, dtype=np.float64)   # Destination (fixed)
     
     # Check for NaN or Inf
-    if not np.all(np.isfinite(fixed_pts)) or not np.all(np.isfinite(moving_pts)):
+    if not np.all(np.isfinite(src_pts)) or not np.all(np.isfinite(dst_pts)):
         raise TransformEstimationError(
             "Input points contain NaN or Inf values",
             "INVALID_INPUT"
         )
     
     # Step 1: Compute centroids
-    centroid_fixed = np.mean(fixed_pts, axis=0)
-    centroid_moving = np.mean(moving_pts, axis=0)
+    mu_src = np.mean(src_pts, axis=0)  # Moving image centroid
+    mu_dst = np.mean(dst_pts, axis=0)  # Fixed image centroid
     
-    # Step 2: Center the points
-    fixed_centered = fixed_pts - centroid_fixed
-    moving_centered = moving_pts - centroid_moving
+    # Step 2: Center the points (remove translation)
+    X = src_pts - mu_src  # Centered source points
+    Y = dst_pts - mu_dst  # Centered destination points
     
-    # Step 3: Compute cross-covariance matrix H
-    H = moving_centered.T @ fixed_centered  # 2x2 matrix
+    # Step 3: Compute cross-covariance matrix H = X^T @ Y
+    # This follows the Kabsch algorithm convention
+    H = X.T @ Y  # 2x2 matrix
     
     # Step 4: SVD of H
     try:
@@ -99,48 +108,45 @@ def compute_rigid_transform(
             "SINGULAR_TRANSFORM"
         )
     
-    # Step 5: Compute rotation matrix R = V * U^T
-    V = Vt.T
-    R = V @ U.T
+    # Step 5: Compute rotation matrix R = V @ U^T
+    R = Vt.T @ U.T
     
     # Ensure proper rotation (det(R) = +1, not reflection)
     if np.linalg.det(R) < 0:
-        # Flip sign of last column of V
-        V[:, -1] *= -1
-        R = V @ U.T
+        # Flip sign of last row of Vt (equivalent to last column of V)
+        Vt[1, :] *= -1
+        R = Vt.T @ U.T
     
     # Step 6: Compute scale (if requested)
     if allow_scale:
         # Compute scale using Umeyama's formula
-        var_moving = np.sum(moving_centered ** 2)
-        if var_moving < 1e-12:
+        var_src = np.sum(X ** 2)
+        if var_src < 1e-12:
             raise TransformEstimationError(
-                "Moving points have zero variance",
+                "Source points have zero variance",
                 "SINGULAR_TRANSFORM"
             )
-        scale = np.sum(S) / var_moving
+        scale = np.sum(S) / var_src
     else:
         scale = 1.0
     
     # Step 7: Compute translation
-    # t = centroid_fixed - scale * R @ centroid_moving
-    t = centroid_fixed - scale * (R @ centroid_moving)
+    # t = mu_dst - scale * R @ mu_src
+    t = mu_dst - scale * (R @ mu_src)
     
     # Step 8: Extract rotation angle
     theta_rad = np.arctan2(R[1, 0], R[0, 0])
     theta_deg = np.degrees(theta_rad)
     
     # Step 9: Build 3x3 homogeneous transformation matrix
-    matrix_3x3 = np.array([
-        [scale * R[0, 0], scale * R[0, 1], t[0]],
-        [scale * R[1, 0], scale * R[1, 1], t[1]],
-        [0.0, 0.0, 1.0]
-    ])
+    matrix_3x3 = np.eye(3)
+    matrix_3x3[0:2, 0:2] = scale * R
+    matrix_3x3[0:2, 2] = t
     
     # Step 10: Compute RMS error
     # Transform moving points and compute residuals
-    transformed_moving = transform_points(moving_pts, matrix_3x3)
-    residuals = fixed_pts - transformed_moving
+    transformed_src = transform_points(src_pts, matrix_3x3)
+    residuals = dst_pts - transformed_src
     rms_error = np.sqrt(np.mean(np.sum(residuals ** 2, axis=1)))
     
     return RigidTransformResult(

@@ -17,6 +17,10 @@ numpy>=1.24.0
 opencv-python>=4.8.0
 Pillow>=10.0.0
 
+# Deep learning (optional, for PyTorch-based image warping with Chinese path support)
+# Install PyTorch according to your system: https://pytorch.org/get-started/locally/
+# torch>=2.0.0
+
 # Development dependencies
 # pytest>=7.4.0
 # httpx>=0.25.0  # For testing FastAPI

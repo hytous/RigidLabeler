@@ -32,6 +32,19 @@
         </property>
         <layout class="QVBoxLayout" name="fixedImageLayout">
          <item>
+          <widget class="QLabel" name="lblFixedFileName">
+           <property name="text">
+            <string></string>
+           </property>
+           <property name="styleSheet">
+            <string>color: gray; font-size: 11px;</string>
+           </property>
+           <property name="wordWrap">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
           <widget class="QGraphicsView" name="fixedImageView">
            <property name="minimumSize">
             <size>
@@ -53,6 +66,16 @@
             <widget class="QPushButton" name="btnLoadFixed">
              <property name="text">
               <string>Load Fixed Image...</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btnPrevFixed">
+             <property name="text">
+              <string>&lt; Prev</string>
+             </property>
+             <property name="toolTip">
+              <string>Load previous image from the same folder</string>
              </property>
             </widget>
            </item>
@@ -91,6 +114,19 @@
         </property>
         <layout class="QVBoxLayout" name="movingImageLayout">
          <item>
+          <widget class="QLabel" name="lblMovingFileName">
+           <property name="text">
+            <string></string>
+           </property>
+           <property name="styleSheet">
+            <string>color: gray; font-size: 11px;</string>
+           </property>
+           <property name="wordWrap">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
           <widget class="QGraphicsView" name="movingImageView">
            <property name="minimumSize">
             <size>
@@ -112,6 +148,16 @@
             <widget class="QPushButton" name="btnLoadMoving">
              <property name="text">
               <string>Load Moving Image...</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btnPrevMoving">
+             <property name="text">
+              <string>&lt; Prev</string>
+             </property>
+             <property name="toolTip">
+              <string>Load previous image from the same folder</string>
              </property>
             </widget>
            </item>
@@ -208,6 +254,30 @@
             </layout>
            </item>
            <item>
+            <layout class="QHBoxLayout" name="tiePointIOButtons">
+             <item>
+              <widget class="QPushButton" name="btnExportPoints">
+               <property name="text">
+                <string>Export Points...</string>
+               </property>
+               <property name="toolTip">
+                <string>Export tie points to a CSV file</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="btnImportPoints">
+               <property name="text">
+                <string>Import Points...</string>
+               </property>
+               <property name="toolTip">
+                <string>Import tie points from a CSV file</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
             <widget class="QLabel" name="lblPointCount">
              <property name="text">
               <string>Points: 0 (min 2 required)</string>
@@ -225,9 +295,25 @@
           </property>
           <layout class="QVBoxLayout" name="optionsLayout">
            <item>
+            <widget class="QCheckBox" name="chkOriginTopLeft">
+             <property name="text">
+              <string>Origin at Top-Left Corner</string>
+             </property>
+             <property name="toolTip">
+              <string>When checked, coordinates use top-left as origin (0,0). Default uses image center as origin.</string>
+             </property>
+             <property name="checked">
+              <bool>false</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
             <widget class="QCheckBox" name="chkAllowScale">
              <property name="text">
               <string>Allow Scale (Similarity Transform)</string>
+             </property>
+             <property name="checked">
+              <bool>true</bool>
              </property>
              <property name="toolTip">
               <string>When checked, computes similarity transform with uniform scale</string>
@@ -254,6 +340,19 @@
              </property>
              <property name="toolTip">
               <string>Show semi-transparent warped image overlay on fixed image</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QCheckBox" name="chkRealtimeCompute">
+             <property name="text">
+              <string>Real-time Compute Mode</string>
+             </property>
+             <property name="toolTip">
+              <string>Automatically compute transform 10s after adding a complete point pair (requires 3+ pairs)</string>
+             </property>
+             <property name="enabled">
+              <bool>false</bool>
              </property>
             </widget>
            </item>
@@ -349,22 +448,36 @@
             </widget>
            </item>
            <item>
-            <widget class="QPushButton" name="btnNextPair">
-             <property name="text">
-              <string>Next Pair &gt;&gt;</string>
-             </property>
-             <property name="toolTip">
-              <string>Load next fixed and moving images from their folders</string>
-             </property>
-            </widget>
+            <layout class="QHBoxLayout" name="pairNavigationLayout">
+             <item>
+              <widget class="QPushButton" name="btnPrevPair">
+               <property name="text">
+                <string>&lt;&lt; Prev Pair</string>
+               </property>
+               <property name="toolTip">
+                <string>Load previous fixed and moving images from their folders</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="btnNextPair">
+               <property name="text">
+                <string>Next Pair &gt;&gt;</string>
+               </property>
+               <property name="toolTip">
+                <string>Load next fixed and moving images from their folders</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
            </item>
            <item>
-            <widget class="QPushButton" name="btnExportGT">
+            <widget class="QPushButton" name="btnExportMatrix">
              <property name="text">
-              <string>Export to GT Folder...</string>
+              <string>Export Matrix...</string>
              </property>
              <property name="toolTip">
-              <string>Export 3x3 matrix to GT folder as numbered txt files</string>
+              <string>Export 3x3 transformation matrix to a text file</string>
              </property>
             </widget>
            </item>

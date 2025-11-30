@@ -111,6 +111,11 @@ public:
     // For display
     void updateFixedPoint(int index, const QPointF &point);
     void updateMovingPoint(int index, const QPointF &point);
+    
+    // Coordinate display settings
+    void setDisplayCoordinateOffset(const QPointF &fixedOffset, const QPointF &movingOffset);
+    void setUseTopLeftOrigin(bool useTopLeft);
+    bool useTopLeftOrigin() const { return m_useTopLeftOrigin; }
 
 signals:
     void pointAdded(int pairIndex, bool isFixed);
@@ -143,6 +148,14 @@ private:
     
     // Cached pairs for efficient access
     QList<TiePointPair> m_pairs;
+    
+    // Coordinate display settings
+    bool m_useTopLeftOrigin = false;  // false = center origin (default)
+    QPointF m_fixedOffset;            // Image center offset for fixed image
+    QPointF m_movingOffset;           // Image center offset for moving image
+    
+    // Helper for display coordinate conversion
+    QPointF toDisplayCoord(const QPointF &pixelPos, bool isFixed) const;
 };
 
 #endif // TIEPOINTMODEL_H
