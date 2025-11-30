@@ -2,7 +2,7 @@
 
 A lightweight desktop tool for **2D rigid transformation labeling** (rotation + translation [+ optional uniform scale]) built with **Qt C++ frontend** and **FastAPI Python backend**.
 
-> 简单说：这是一个用来给两张 2D 图像“打刚性配准矩阵标签”的小工具，方便后续深度学习训练和算法评测。
+> 简单说：这是一个用来给两张 2D 图像"打刚性配准矩阵标签"的小工具，方便后续深度学习训练和算法评测。
 
 ---
 
@@ -13,18 +13,31 @@ A lightweight desktop tool for **2D rigid transformation labeling** (rotation + 
   - 输出旋转角度 `θ`、平移 `(tx, ty)`，以及 3×3 齐次变换矩阵
 
 - 🖱️ **交互式点对标注**
-  - 左右双视图显示 Base / Warp 图像
+  - 左右双视图显示 Fixed / Moving 图像
   - 鼠标点击添加 / 删除 / 编辑对应点（tie points）
   - 支持在表格中精细调整坐标
+  - **点击选择**：点击图像中的标记点即可选中
+  - **框选多点**：Shift + 拖动创建选择框，批量选择点
+  - **Ctrl+Z 撤销**：支持撤销添加/删除点操作
+
+- 🔍 **灵活的视图操控**
+  - 滚轮缩放（可同步两侧视图）
+  - Ctrl + 拖动进行平移
+  - 双视图缩放/平移同步选项
 
 - 📐 **稳健的变换估计**
   - 使用质心对齐 + SVD（Procrustes 分析）估计刚性变换
   - 支持可选的 **uniform scale**（旋转 + 等比缩放 + 平移）
 
 - 💾 **统一标签格式**
-  - 标签使用 JSON/CSV 等格式保存
+  - 标签使用 JSON 格式保存
   - 包含：图像路径、变换参数、3×3 矩阵、点对列表
   - 方便直接接入 Python / PyTorch 训练代码
+
+- 📁 **批量标注工作流**
+  - Fixed / Moving 图像独立目录记忆
+  - Next Fixed / Next Moving / Next Pair 快速切换图像
+  - **GT 文件夹导出**：一键导出 3×3 矩阵到 GT 文件夹（编号 txt 文件）
 
 - 🧱 **清晰的前后端分层**
   - 前端：Qt C++，负责 UI、交互和状态管理
@@ -37,12 +50,15 @@ A lightweight desktop tool for **2D rigid transformation labeling** (rotation + 
 
 整体采用 **本地桌面应用 + 本地 HTTP 服务** 的方式运行：
 
+```
 +------------------+          HTTP (JSON)           +------------------------+
 |  Qt Frontend     |  <-------------------------->  |  FastAPI Backend       |
-|  - MainWindow    |                                |  - /compute_rigid      |
-|  - ImageView     |                                |  - /labels/save        |
-|  - TiePointTable |                                |  - /labels/load        |
-+------------------+                                +------------------------+
+|  - MainWindow    |                                |  - /health             |
+|  - ImageView     |                                |  - /compute/rigid      |
+|  - TiePointTable |                                |  - /labels/save        |
++------------------+                                |  - /labels/load        |
+                                                    +------------------------+
+```
 
 - Qt 前端负责：
   - 加载 / 显示图像
@@ -52,163 +68,204 @@ A lightweight desktop tool for **2D rigid transformation labeling** (rotation + 
 - FastAPI 后端负责：
   - 用数学方法从点对中估计刚性变换
   - 将变换参数封装成统一标签格式
-  - 将标签保存为 JSON/CSV/NPY 等文件
+  - 将标签保存为 JSON 文件
 
 ------
 
 ## 📂 Project Structure
 
-> 目录结构是为 Qt + FastAPI + Python 工程设计的参考实现，你可以根据需要微调。
-
 ```text
 RigidLabeler/
-├─ README.md
-├─ LICENSE
-├─ .gitignore
-├─ CMakeLists.txt              # 顶层 CMake（驱动 Qt 子工程）
+├── README.md
+├── start_backend.bat          # Windows 启动后端脚本
+├── start_backend.ps1          # PowerShell 启动后端脚本
 │
-├─ config/
-│   ├─ app.yaml                # 前端配置（默认路径、语言等）
-│   └─ backend.yaml            # 后端地址、端口等
+├── config/
+│   ├── app.yaml               # 前端配置（后端URL、默认路径等）
+│   └── backend.yaml           # 后端配置（端口、标签路径等）
 │
-├─ docs/
-│   ├─ design_overview.md      # 架构说明
-│   └─ api_spec.md             # 前后端接口文档
+├── docs/
+│   ├── design_overview.md     # 架构说明
+│   ├── api_spec.md            # 前后端接口文档
+│   ├── config_spec.md         # 配置文件规范
+│   └── label_format.md        # 标签格式规范
 │
-├─ data/
-│   ├─ images/                 # 示例图像
-│   ├─ labels/                 # 标签输出目录
-│   └─ projects/               # （可选）工程文件
+├── data/
+│   ├── images/                # 示例图像目录
+│   ├── labels/                # 标签输出目录
+│   └── temp/                  # 临时文件目录
 │
-├─ logs/
-│   ├─ frontend/
-│   └─ backend/
-│
-├─ frontend/                   # Qt C++ 客户端
-│   ├─ CMakeLists.txt
-│   ├─ include/
-│   │   ├─ app/
-│   │   │   ├─ MainWindow.h
-│   │   │   ├─ AppConfig.h
-│   │   │   └─ BackendClient.h     # 封装 HTTP 请求
-│   │   ├─ ui/
-│   │   │   ├─ ImageViewWidget.h   # 显示单张图像的控件
-│   │   │   ├─ TiePointTableWidget.h
-│   │   │   └─ ToolbarWidget.h
-│   │   └─ model/
-│   │       ├─ ImagePairModel.h    # 管理一对图像及其状态
-│   │       └─ TiePointModel.h     # 点对数据模型
+├── frontend/                  # Qt C++ 客户端
+│   ├── frontend.pro           # Qt 项目文件
+│   ├── main.cpp               # 程序入口
+│   ├── mainwindow.h           # 主窗口头文件
+│   ├── mainwindow.cpp         # 主窗口实现
+│   ├── mainwindow.ui          # Qt Designer UI 文件
 │   │
-│   ├─ src/
-│   │   ├─ main.cpp
-│   │   ├─ app/
-│   │   │   ├─ MainWindow.cpp
-│   │   │   ├─ AppConfig.cpp
-│   │   │   └─ BackendClient.cpp
-│   │   ├─ ui/
-│   │   │   ├─ ImageViewWidget.cpp
-│   │   │   ├─ TiePointTableWidget.cpp
-│   │   │   └─ ToolbarWidget.cpp
-│   │   └─ model/
-│   │       ├─ ImagePairModel.cpp
-│   │       └─ TiePointModel.cpp
+│   ├── app/                   # 应用层
+│   │   ├── AppConfig.h/cpp    # 配置管理
+│   │   └── BackendClient.h/cpp # HTTP 客户端
 │   │
-│   ├─ resources/
-│   │   ├─ icons/
-│   │   ├─ styles/                 # qss 皮肤
-│   │   └─ qml/                    # 若使用 QML
-│   └─ tests/
+│   └── model/                 # 数据模型
+│       ├── ImagePairModel.h/cpp   # 图像对模型
+│       └── TiePointModel.h/cpp    # 点对数据模型
 │
-└─ backend/
-    ├─ rigidlabeler_backend/
-    │   ├─ __init__.py
-    │   ├─ config.py               # 读取 backend.yaml
-    │   │
-    │   ├─ api/                    # FastAPI 接口定义
-    │   │   ├─ __init__.py
-    │   │   ├─ server.py           # FastAPI 应用入口
-    │   │   └─ schemas.py          # Pydantic 请求/响应模型
-    │   │
-    │   ├─ core/                   # 核心算法逻辑
-    │   │   ├─ transforms.py       # 2D 刚性变换估计 (R, t, [s])
-    │   │   ├─ tie_points.py       # 点对校验/预处理
-    │   │   └─ label_ops.py        # 标签对象构建与转换
-    │   │
-    │   ├─ io/                     # 数据/标签存取
-    │   │   ├─ image_loader.py     # 图像读写（OpenCV/PIL）
-    │   │   ├─ label_store.py      # JSON/CSV/NPY 标签读写
-    │   │   └─ project_store.py    # （可选）工程文件读写
-    │   │
-    │   ├─ utils/
-    │   │   ├─ logging_utils.py
-    │   │   └─ path_utils.py
-    │   │
-    │   └─ tests/
-    │       ├─ test_transforms.py
-    │       ├─ test_label_store.py
-    │       └─ test_api.py
+└── backend/                   # FastAPI Python 后端
+    ├── requirements.txt       # Python 依赖
     │
-    └─ scripts/
-        ├─ run_server.py           # 一键启动后端
-        ├─ export_labels.py        # 标签格式转换脚本
-        └─ demo_generate.py        # demo 数据生成与自测
+    ├── scripts/
+    │   └── run_server.py      # 启动后端服务
+    │
+    └── rigidlabeler_backend/
+        ├── __init__.py
+        ├── config.py          # 读取 backend.yaml
+        │
+        ├── api/               # FastAPI 接口定义
+        │   ├── __init__.py
+        │   ├── server.py      # FastAPI 应用入口
+        │   └── schemas.py     # Pydantic 请求/响应模型
+        │
+        ├── core/              # 核心算法逻辑
+        │   ├── __init__.py
+        │   └── transforms.py  # 2D 刚性变换估计 (SVD)
+        │
+        ├── io/                # 数据/标签存取
+        │   ├── __init__.py
+        │   ├── image_loader.py    # 图像读写（OpenCV）
+        │   └── label_store.py     # JSON 标签读写
+        │
+        ├── utils/
+        │   ├── __init__.py
+        │   ├── logging_utils.py
+        │   └── path_utils.py
+        │
+        └── tests/             # 单元测试
+            ├── __init__.py
+            ├── test_transforms.py
+            ├── test_label_store.py
+            └── test_api.py
 ```
+
+------
+
+## 🚀 Quick Start
+
+### 1. 启动后端服务
+
+```bash
+# 安装 Python 依赖
+cd backend
+pip install -r requirements.txt
+
+# 启动后端（默认端口 8000）
+python scripts/run_server.py
+
+# 或使用启动脚本
+# Windows: start_backend.bat
+# PowerShell: .\start_backend.ps1
+```
+
+### 2. 构建并运行前端
+
+```bash
+# 使用 Qt Creator 打开 frontend/frontend.pro
+# 或使用 qmake 命令行构建
+
+cd frontend
+qmake frontend.pro
+make  # Linux/macOS
+# 或 mingw32-make / nmake (Windows)
+
+./frontend  # 运行程序
+```
+
+### 3. 使用流程
+
+1. 点击 **Load Fixed Image** 加载基准图像
+2. 点击 **Load Moving Image** 加载待配准图像
+3. 点击 **Add Point** 进入添加点模式
+4. 在两张图像上依次点击对应点（先 Fixed，后 Moving）
+5. 重复步骤 3-4 添加至少 2 个点对
+6. 点击 **Compute Transform** 计算变换参数
+7. 点击 **Save Label** 保存标签
+
+### 4. 快捷操作
+
+- **视图操控**
+  - 滚轮：缩放图像
+  - Ctrl + 拖动：平移图像
+  - Shift + 拖动：框选多个点
+- **快捷键**
+  - Ctrl+Z：撤销操作
+  - Ctrl+Y：重做操作
+  - Ctrl+1：加载 Fixed 图像
+  - Ctrl+2：加载 Moving 图像
+  - Ctrl+R：计算变换
+  - Ctrl+S：保存标签
+- **批量标注**
+  - 点击 **Next >** 按钮快速切换到同目录下一张图像
+  - 点击 **Next Pair >>** 同时切换 Fixed 和 Moving 图像
+  - 点击 **Export to GT Folder** 导出 3×3 矩阵到 GT 文件夹
 
 ------
 
 ## 📡 API Overview (FastAPI)
 
-> 这里只列出核心接口，详细字段可以在 `docs/api_spec.md` 中查看。
+> 详细字段可以在 `docs/api_spec.md` 中查看。
 
-### `POST /compute_rigid`
+### `GET /health`
+
+健康检查接口。
+
+### `POST /compute/rigid`
 
 根据点对估计 2D 刚性变换。
 
-**Request (示例):**
-
+**Request:**
 ```json
 {
-  "points": [
-    { "base": [x1, y1], "warp": [x1p, y1p] },
-    { "base": [x2, y2], "warp": [x2p, y2p] }
+  "tie_points": [
+    { "fixed": {"x": 100, "y": 200}, "moving": {"x": 110, "y": 195} },
+    { "fixed": {"x": 300, "y": 150}, "moving": {"x": 315, "y": 140} }
   ],
-  "allow_scale": false
+  "allow_scale": false,
+  "min_points_required": 2
 }
 ```
 
-**Response (示例):**
-
+**Response:**
 ```json
 {
-  "theta_deg": 5.3,
-  "tx": 12.4,
-  "ty": -3.1,
-  "scale": 1.0,
-  "matrix_3x3": [
-    [0.995, -0.099, 12.4],
-    [0.099,  0.995, -3.1],
-    [0.0,    0.0,   1.0]
-  ],
-  "rms_error": 0.82
+  "success": true,
+  "rigid": {
+    "theta_deg": 5.3,
+    "tx": 12.4,
+    "ty": -3.1,
+    "scale": 1.0
+  },
+  "matrix_3x3": [[...], [...], [...]],
+  "rms_error": 0.82,
+  "num_points": 2
 }
 ```
 
 ### `POST /labels/save`
 
-保存一对图像的标签（含多种信息：变换、点对等）。
+保存一对图像的标签。
 
-### `GET /labels/load`
+### `POST /labels/load`
 
 加载某一对图像的已有标签。
 
 ------
 
-## 🧾 Label Format (Example)
+## 🧾 Label Format
 
-统一的标签结构（JSON 示例）：
+统一的标签结构（JSON）：
 
 ```json
 {
+  "version": "1.0",
   "image_fixed": "data/images/vis_001.png",
   "image_moving": "data/images/ir_001.png",
   "rigid": {
@@ -223,22 +280,31 @@ RigidLabeler/
     [0.0,    0.0,   1.0]
   ],
   "tie_points": [
-    { "base": [120.5, 80.2], "warp": [130.1, 75.9] },
-    { "base": [200.0, 150.0], "warp": [210.3, 143.2] }
-  ]
+    { "fixed": {"x": 120.5, "y": 80.2}, "moving": {"x": 130.1, "y": 75.9} },
+    { "fixed": {"x": 200.0, "y": 150.0}, "moving": {"x": 210.3, "y": 143.2} }
+  ],
+  "timestamp": "2025-11-30T12:00:00",
+  "comment": ""
 }
 ```
 
-你可以在 `backend/io/label_store.py` 中自由扩展字段，以适配你的数据管线和训练代码。
+详细格式说明请参考 `docs/label_format.md`。
 
 ------
 
-## 📌 Roadmap (Work in Progress)
+## 📌 Roadmap
 
--  基本 UI：加载图像、双视图显示、点对管理
--  基本 2D 刚性变换估计（R + t [+ s]）
--  标签导出：JSON / CSV / NPY
--  预览功能：显示 Warp 后的重叠效果
--  工程管理：批量管理多对图像的标签
--  键盘快捷键 / 高级编辑功能
--  跨平台打包（Windows / Linux）
+- [x] 基本 UI：加载图像、双视图显示、点对管理
+- [x] 基本 2D 刚性变换估计（R + t [+ s]）
+- [x] 标签导出：JSON 格式
+- [x] 后端 API：健康检查、计算变换、保存/加载标签
+- [ ] 预览功能：显示 Warp 后的重叠效果
+- [ ] 工程管理：批量管理多对图像的标签
+- [ ] 键盘快捷键 / 高级编辑功能
+- [ ] 跨平台打包（Windows / Linux / macOS）
+
+------
+
+## 📄 License
+
+MIT License

@@ -1,0 +1,14 @@
+# RigidLabeler Backend Configuration
+# 后端服务及数据根目录配置
+
+server:
+  host: "127.0.0.1"
+  port: 8000
+
+paths:
+  data_root: "data"             # 数据总根目录
+  labels_root: "data/labels"    # 标签文件根目录
+  temp_root: "data/temp"        # 临时文件、预览图目录
+
+logging:
+  level: "INFO"                 # DEBUG / INFO / WARNING / ERROR

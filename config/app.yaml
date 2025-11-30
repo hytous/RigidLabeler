@@ -1,0 +1,19 @@
+# RigidLabeler Frontend Configuration
+# 前端（Qt 客户端）配置
+
+backend:
+  base_url: "http://127.0.0.1:8000"
+
+paths:
+  default_images_root: "data/images"   # 第一次打开文件对话框时的初始目录
+  default_labels_root: "data/labels"   # 前端浏览标签时的默认目录
+
+ui:
+  language: "zh-CN"                    # UI 语言（预留）
+  theme: "light"                       # 主题：light / dark（预留）
+  link_views_by_default: true          # 是否默认联动左右图像视图
+  remember_last_dir: true              # 是否记住上一次选图目录
+
+transform:
+  allow_scale_default: false           # 计算变换时默认是否允许统一缩放
+  min_points_required: 3               # 前端调用 /compute/rigid 前的点对数量下限

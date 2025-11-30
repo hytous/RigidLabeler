@@ -1,0 +1,6 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+    <qresource prefix="/translations">
+        <file>rigidlabeler_zh.qm</file>
+    </qresource>
+</RCC>

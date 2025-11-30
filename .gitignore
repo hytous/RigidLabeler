@@ -135,3 +135,8 @@ $RECYCLE.BIN/
 *~
 *.bak
 *.orig
+
+
+# 我不想要的
+*.xml
+*.iml
