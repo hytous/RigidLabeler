@@ -10,7 +10,7 @@ A lightweight desktop tool for **2D rigid transformation labeling** (rotation + 
 
 - 🎯 **2D 刚性变换标注**
   - 支持通过人工点选对应点，拟合出两张图像之间的 2D 刚性变换
-  - 输出旋转角度 `θ`、平移 `(tx, ty)`，以及 3×3 齐次变换矩阵
+  - 输出旋转角度 `θ`、平移 `(tx, ty)`、尺度`scale`，以及 3×3 齐次变换矩阵
 
 - 🖱️ **交互式点对标注**
   - 左右双视图显示 Fixed / Moving 图像

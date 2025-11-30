@@ -8,7 +8,14 @@ Usage:
 
 import argparse
 import sys
+import os
 from pathlib import Path
+
+# Fix for PyInstaller --noconsole mode: redirect stdout/stderr if None
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, 'w')
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, 'w')
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
