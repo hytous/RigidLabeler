@@ -92,7 +92,10 @@
            <item>
             <widget class="QPushButton" name="btnZoomFitFixed">
              <property name="text">
-              <string>Fit</string>
+              <string>Reset View</string>
+             </property>
+             <property name="toolTip">
+              <string>Reset to fit image in view</string>
              </property>
             </widget>
            </item>
@@ -174,7 +177,10 @@
            <item>
             <widget class="QPushButton" name="btnZoomFitMoving">
              <property name="text">
-              <string>Fit</string>
+              <string>Reset View</string>
+             </property>
+             <property name="toolTip">
+              <string>Reset to fit image in view</string>
              </property>
             </widget>
            </item>
@@ -334,16 +340,6 @@
             </widget>
            </item>
            <item>
-            <widget class="QCheckBox" name="chkShowOverlay">
-             <property name="text">
-              <string>Show Warped Overlay</string>
-             </property>
-             <property name="toolTip">
-              <string>Show semi-transparent warped image overlay on fixed image</string>
-             </property>
-            </widget>
-           </item>
-           <item>
             <widget class="QCheckBox" name="chkRealtimeCompute">
              <property name="text">
               <string>Real-time Compute Mode</string>
@@ -355,43 +351,6 @@
               <bool>false</bool>
              </property>
             </widget>
-           </item>
-           <item>
-            <layout class="QHBoxLayout" name="overlayOpacityLayout">
-             <item>
-              <widget class="QLabel" name="lblOpacity">
-               <property name="text">
-                <string>Overlay Opacity:</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QSlider" name="sliderOpacity">
-               <property name="minimum">
-                <number>0</number>
-               </property>
-               <property name="maximum">
-                <number>100</number>
-               </property>
-               <property name="value">
-                <number>50</number>
-               </property>
-               <property name="orientation">
-                <enum>Qt::Horizontal</enum>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QLabel" name="lblOpacityValue">
-               <property name="text">
-                <string>50%</string>
-               </property>
-               <property name="minimumWidth">
-                <number>40</number>
-               </property>
-              </widget>
-             </item>
-            </layout>
            </item>
           </layout>
          </widget>

@@ -75,7 +75,9 @@ private slots:
     // View operations
     void zoomIn();
     void zoomOut();
-    void zoomToFit();
+    void zoomToFitFixed();
+    void zoomToFitMoving();
+    void zoomToFitAll();
     void toggleLinkViews(bool linked);
     
     // Tie point operations
@@ -91,10 +93,6 @@ private slots:
     // Image view interactions
     void onFixedViewClicked(const QPointF &pos);
     void onMovingViewClicked(const QPointF &pos);
-    
-    // Options
-    void onOverlayToggled(bool checked);
-    void onOpacityChanged(int value);
     
     // Backend responses
     void onHealthCheckCompleted(const HealthCheckResult &result);

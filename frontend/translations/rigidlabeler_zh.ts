@@ -36,8 +36,12 @@
         <translation>&lt;&lt; 上一对</translation>
     </message>
     <message>
-        <source>Fit</source>
-        <translation>适应</translation>
+        <source>Reset View</source>
+        <translation>恢复初始大小</translation>
+    </message>
+    <message>
+        <source>Reset to fit image in view</source>
+        <translation>重置视图以适应图像</translation>
     </message>
     <message>
         <source>X: -, Y: -</source>
@@ -78,14 +82,6 @@
     <message>
         <source>Sync Zoom/Pan</source>
         <translation>同步缩放/平移</translation>
-    </message>
-    <message>
-        <source>Show Warped Overlay</source>
-        <translation>显示变换叠加</translation>
-    </message>
-    <message>
-        <source>Overlay Opacity:</source>
-        <translation>叠加透明度:</translation>
     </message>
     <message>
         <source>Actions</source>

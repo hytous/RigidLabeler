@@ -189,7 +189,7 @@ void MainWindow::setupConnections()
     connect(ui->actionClearPoints, &QAction::triggered, this, &MainWindow::clearAllTiePoints);
     connect(ui->actionZoomIn, &QAction::triggered, this, &MainWindow::zoomIn);
     connect(ui->actionZoomOut, &QAction::triggered, this, &MainWindow::zoomOut);
-    connect(ui->actionFitToWindow, &QAction::triggered, this, &MainWindow::zoomToFit);
+    connect(ui->actionFitToWindow, &QAction::triggered, this, &MainWindow::zoomToFitAll);
     connect(ui->actionSyncViews, &QAction::toggled, this, &MainWindow::toggleLinkViews);
     connect(ui->actionCompute, &QAction::triggered, this, &MainWindow::computeTransform);
     connect(ui->actionAbout, &QAction::triggered, this, &MainWindow::showAbout);
@@ -209,8 +209,8 @@ void MainWindow::setupConnections()
     connect(ui->btnNextMoving, &QPushButton::clicked, this, &MainWindow::nextMovingImage);
     connect(ui->btnPrevPair, &QPushButton::clicked, this, &MainWindow::prevPair);
     connect(ui->btnNextPair, &QPushButton::clicked, this, &MainWindow::nextPair);
-    connect(ui->btnZoomFitFixed, &QPushButton::clicked, this, &MainWindow::zoomToFit);
-    connect(ui->btnZoomFitMoving, &QPushButton::clicked, this, &MainWindow::zoomToFit);
+    connect(ui->btnZoomFitFixed, &QPushButton::clicked, this, &MainWindow::zoomToFitFixed);
+    connect(ui->btnZoomFitMoving, &QPushButton::clicked, this, &MainWindow::zoomToFitMoving);
     connect(ui->btnAddPoint, &QPushButton::clicked, this, &MainWindow::addTiePoint);
     connect(ui->btnDeletePoint, &QPushButton::clicked, this, &MainWindow::deleteSelectedTiePoint);
     connect(ui->btnClearPoints, &QPushButton::clicked, this, &MainWindow::clearAllTiePoints);
@@ -224,8 +224,6 @@ void MainWindow::setupConnections()
     
     // Options
     connect(ui->chkOriginTopLeft, &QCheckBox::toggled, this, &MainWindow::onOriginModeToggled);
-    connect(ui->chkShowOverlay, &QCheckBox::toggled, this, &MainWindow::onOverlayToggled);
-    connect(ui->sliderOpacity, &QSlider::valueChanged, this, &MainWindow::onOpacityChanged);
     connect(ui->chkRealtimeCompute, &QCheckBox::toggled, this, &MainWindow::onRealtimeComputeToggled);
     
     // Real-time compute timer
@@ -717,16 +715,24 @@ void MainWindow::zoomOut()
     m_zoomLabel->setText(tr("Zoom: %1%").arg(int(m_zoomFactor * 100)));
 }
 
-void MainWindow::zoomToFit()
+void MainWindow::zoomToFitFixed()
 {
     if (m_fixedPixmapItem) {
         ui->fixedImageView->fitInView(m_fixedPixmapItem, Qt::KeepAspectRatio);
     }
+}
+
+void MainWindow::zoomToFitMoving()
+{
     if (m_movingPixmapItem) {
         ui->movingImageView->fitInView(m_movingPixmapItem, Qt::KeepAspectRatio);
     }
-    m_zoomFactor = 1.0;
-    m_zoomLabel->setText(tr("Zoom: Fit"));
+}
+
+void MainWindow::zoomToFitAll()
+{
+    zoomToFitFixed();
+    zoomToFitMoving();
 }
 
 void MainWindow::toggleLinkViews(bool linked)
@@ -854,21 +860,6 @@ void MainWindow::onMovingViewClicked(const QPointF &pos)
 }
 
 // ============================================================================
-// Options
-// ============================================================================
-
-void MainWindow::onOverlayToggled(bool checked)
-{
-    // TODO: Implement overlay visualization
-    Q_UNUSED(checked);
-}
-
-void MainWindow::onOpacityChanged(int value)
-{
-    ui->lblOpacityValue->setText(tr("%1%").arg(value));
-    // TODO: Update overlay opacity
-}
-
 // ============================================================================
 // Backend Responses
 // ============================================================================
