@@ -1629,6 +1629,20 @@ void MainWindow::switchToEnglish()
     // Retranslate UI
     ui->retranslateUi(this);
     
+    // Update transform mode combo box tooltips
+    ui->cmbTransformMode->setItemData(0, 
+        tr("Rigid: Rotation + Translation only\n"
+           "Parameters: θ (rotation), tx, ty (translation)\n"
+           "Minimum points: 2"), Qt::ToolTipRole);
+    ui->cmbTransformMode->setItemData(1, 
+        tr("Similarity: Rotation + Translation + Uniform Scale\n"
+           "Parameters: θ (rotation), tx, ty (translation), scale\n"
+           "Minimum points: 2"), Qt::ToolTipRole);
+    ui->cmbTransformMode->setItemData(2, 
+        tr("Affine: Full 6-DOF transformation\n"
+           "Parameters: θ (rotation), tx, ty (translation), scale_x, scale_y, shear\n"
+           "Minimum points: 3"), Qt::ToolTipRole);
+    
     // Update dynamic texts
     m_backendStatusLabel->setText(tr("Backend: Checking..."));
     m_pointCountLabel->setText(tr("Points: %1").arg(m_tiePointModel->count()));
@@ -1662,6 +1676,20 @@ void MainWindow::switchToChinese()
     
     // Retranslate UI
     ui->retranslateUi(this);
+    
+    // Update transform mode combo box tooltips
+    ui->cmbTransformMode->setItemData(0, 
+        tr("Rigid: Rotation + Translation only\n"
+           "Parameters: θ (rotation), tx, ty (translation)\n"
+           "Minimum points: 2"), Qt::ToolTipRole);
+    ui->cmbTransformMode->setItemData(1, 
+        tr("Similarity: Rotation + Translation + Uniform Scale\n"
+           "Parameters: θ (rotation), tx, ty (translation), scale\n"
+           "Minimum points: 2"), Qt::ToolTipRole);
+    ui->cmbTransformMode->setItemData(2, 
+        tr("Affine: Full 6-DOF transformation\n"
+           "Parameters: θ (rotation), tx, ty (translation), scale_x, scale_y, shear\n"
+           "Minimum points: 3"), Qt::ToolTipRole);
     
     // Update dynamic texts
     m_backendStatusLabel->setText(tr("Backend: Checking..."));
