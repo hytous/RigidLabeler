@@ -12,13 +12,18 @@
 struct TiePoint;
 
 /**
- * @brief Rigid transformation parameters.
+ * @brief Affine transformation parameters.
  */
 struct RigidParams {
     double theta_deg = 0.0;  // Rotation angle in degrees
     double tx = 0.0;         // Translation X
     double ty = 0.0;         // Translation Y
-    double scale = 1.0;      // Uniform scale
+    double scale_x = 1.0;    // Scale in X direction
+    double scale_y = 1.0;    // Scale in Y direction
+    double shear = 0.0;      // Shear factor
+    
+    // Backward compatibility: average scale
+    double scale() const { return (scale_x + scale_y) / 2.0; }
 };
 
 /**
@@ -109,7 +114,7 @@ public:
     // API methods
     void healthCheck();
     void computeRigid(const QList<QPair<QPointF, QPointF>> &tiePoints, 
-                      bool allowScale = false,
+                      const QString &transformMode = "affine",
                       int minPointsRequired = 2);
     void saveLabel(const QString &imageFixed,
                    const QString &imageMoving,

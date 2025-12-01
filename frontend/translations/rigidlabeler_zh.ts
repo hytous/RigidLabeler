@@ -340,6 +340,18 @@
         <translation>缩放: %1</translation>
     </message>
     <message>
+        <source>Scale X: %1</source>
+        <translation>X缩放: %1</translation>
+    </message>
+    <message>
+        <source>Scale Y: %1</source>
+        <translation>Y缩放: %1</translation>
+    </message>
+    <message>
+        <source>Shear: %1</source>
+        <translation>剪切: %1</translation>
+    </message>
+    <message>
         <source>RMS Error: %1 px</source>
         <translation>RMS误差: %1 像素</translation>
     </message>
@@ -350,6 +362,34 @@
     <message>
         <source>Matrix:</source>
         <translation>矩阵:</translation>
+    </message>
+    <message>
+        <source>Rigid: Rotation + Translation only
+Parameters: θ (rotation), tx, ty (translation)
+Minimum points: 2</source>
+        <translation>刚性: 仅旋转 + 平移
+参数: θ (旋转), tx, ty (平移)
+最少点数: 2</translation>
+    </message>
+    <message>
+        <source>Similarity: Rotation + Translation + Uniform Scale
+Parameters: θ (rotation), tx, ty (translation), scale
+Minimum points: 2</source>
+        <translation>相似: 旋转 + 平移 + 均匀缩放
+参数: θ (旋转), tx, ty (平移), scale (缩放)
+最少点数: 2</translation>
+    </message>
+    <message>
+        <source>Affine: Full 6-DOF transformation
+Parameters: θ (rotation), tx, ty (translation), scale_x, scale_y, shear
+Minimum points: 3</source>
+        <translation>仿射: 完整6自由度变换
+参数: θ (旋转), tx, ty (平移), scale_x, scale_y (非均匀缩放), shear (剪切)
+最少点数: 3</translation>
+    </message>
+    <message>
+        <source>Transform Mode:</source>
+        <translation>变换模式:</translation>
     </message>
     <message>
         <source>Transform computed successfully.</source>
@@ -396,8 +436,8 @@ ID: %1
         <translation>关于 RigidLabeler</translation>
     </message>
     <message>
-        <source>&lt;h2&gt;RigidLabeler&lt;/h2&gt;&lt;p&gt;A 2D rigid transformation labeling tool.&lt;/p&gt;&lt;p&gt;Version 1.0&lt;/p&gt;&lt;p&gt;This tool allows you to:&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Load image pairs (fixed and moving)&lt;/li&gt;&lt;li&gt;Define tie points between images&lt;/li&gt;&lt;li&gt;Compute rigid/similarity transforms&lt;/li&gt;&lt;li&gt;Save and load transformation labels&lt;/li&gt;&lt;/ul&gt;</source>
-        <translation>&lt;h2&gt;RigidLabeler&lt;/h2&gt;&lt;p&gt;2D刚性变换标注工具。&lt;/p&gt;&lt;p&gt;版本 1.0&lt;/p&gt;&lt;p&gt;本工具可以:&lt;/p&gt;&lt;ul&gt;&lt;li&gt;加载图像对 (固定和移动图像)&lt;/li&gt;&lt;li&gt;定义图像间的对应点&lt;/li&gt;&lt;li&gt;计算刚性/相似变换&lt;/li&gt;&lt;li&gt;保存和加载变换标签&lt;/li&gt;&lt;/ul&gt;</translation>
+        <source>&lt;h2&gt;RigidLabeler&lt;/h2&gt;&lt;p&gt;A 2D geometric transformation labeling tool.&lt;/p&gt;&lt;p&gt;Version 0.1.1&lt;/p&gt;&lt;p&gt;This tool allows you to:&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Load image pairs (fixed and moving)&lt;/li&gt;&lt;li&gt;Define tie points between images&lt;/li&gt;&lt;li&gt;Compute rigid/similarity/affine transforms&lt;/li&gt;&lt;li&gt;Save and load transformation labels&lt;/li&gt;&lt;/ul&gt;</source>
+        <translation>&lt;h2&gt;RigidLabeler&lt;/h2&gt;&lt;p&gt;2D几何变换标注工具。&lt;/p&gt;&lt;p&gt;版本 0.1.1&lt;/p&gt;&lt;p&gt;本工具可以:&lt;/p&gt;&lt;ul&gt;&lt;li&gt;加载图像对 (固定和移动图像)&lt;/li&gt;&lt;li&gt;定义图像间的对应点&lt;/li&gt;&lt;li&gt;计算刚性/相似/仿射变换&lt;/li&gt;&lt;li&gt;保存和加载变换标签&lt;/li&gt;&lt;/ul&gt;</translation>
     </message>
     <message>
         <source>Select GT Export Root Folder</source>

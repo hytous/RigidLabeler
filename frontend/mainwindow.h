@@ -203,7 +203,9 @@ private:
     double m_currentTheta;
     double m_currentTx;
     double m_currentTy;
-    double m_currentScale;
+    double m_currentScaleX;
+    double m_currentScaleY;
+    double m_currentShear;
     
     // Point adding mode
     bool m_isAddingPoint;

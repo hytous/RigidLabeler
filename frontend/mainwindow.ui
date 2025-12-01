@@ -301,6 +301,42 @@
           </property>
           <layout class="QVBoxLayout" name="optionsLayout">
            <item>
+            <layout class="QHBoxLayout" name="transformModeLayout">
+             <item>
+              <widget class="QLabel" name="lblTransformMode">
+               <property name="text">
+                <string>Transform Mode:</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QComboBox" name="cmbTransformMode">
+               <property name="toolTip">
+                <string>Select the type of transformation to compute</string>
+               </property>
+               <property name="currentIndex">
+                <number>2</number>
+               </property>
+               <item>
+                <property name="text">
+                 <string>Rigid</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>Similarity</string>
+                </property>
+               </item>
+               <item>
+                <property name="text">
+                 <string>Affine</string>
+                </property>
+               </item>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
             <widget class="QCheckBox" name="chkOriginTopLeft">
              <property name="text">
               <string>Origin at Top-Left Corner</string>
@@ -310,19 +346,6 @@
              </property>
              <property name="checked">
               <bool>false</bool>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QCheckBox" name="chkAllowScale">
-             <property name="text">
-              <string>Allow Scale (Similarity Transform)</string>
-             </property>
-             <property name="checked">
-              <bool>true</bool>
-             </property>
-             <property name="toolTip">
-              <string>When checked, computes similarity transform with uniform scale</string>
              </property>
             </widget>
            </item>

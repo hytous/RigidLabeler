@@ -102,7 +102,7 @@ void BackendClient::handleHealthReply()
 // ============================================================================
 
 void BackendClient::computeRigid(const QList<QPair<QPointF, QPointF>> &tiePoints,
-                                  bool allowScale,
+                                  const QString &transformMode,
                                   int minPointsRequired)
 {
     QJsonArray pointsArray;
@@ -115,7 +115,7 @@ void BackendClient::computeRigid(const QList<QPair<QPointF, QPointF>> &tiePoints
     
     QJsonObject requestBody;
     requestBody["tie_points"] = pointsArray;
-    requestBody["allow_scale"] = allowScale;
+    requestBody["transform_mode"] = transformMode;
     requestBody["min_points_required"] = minPointsRequired;
     
     QNetworkRequest request = createRequest("/compute/rigid");
@@ -156,7 +156,9 @@ void BackendClient::handleComputeRigidReply()
     result.rigid.theta_deg = rigid["theta_deg"].toDouble();
     result.rigid.tx = rigid["tx"].toDouble();
     result.rigid.ty = rigid["ty"].toDouble();
-    result.rigid.scale = rigid["scale"].toDouble();
+    result.rigid.scale_x = rigid["scale_x"].toDouble(1.0);
+    result.rigid.scale_y = rigid["scale_y"].toDouble(1.0);
+    result.rigid.shear = rigid["shear"].toDouble(0.0);
     result.rmsError = data["rms_error"].toDouble();
     result.numPoints = data["num_points"].toInt();
     
@@ -189,7 +191,9 @@ void BackendClient::saveLabel(const QString &imageFixed,
     rigidObj["theta_deg"] = rigid.theta_deg;
     rigidObj["tx"] = rigid.tx;
     rigidObj["ty"] = rigid.ty;
-    rigidObj["scale"] = rigid.scale;
+    rigidObj["scale_x"] = rigid.scale_x;
+    rigidObj["scale_y"] = rigid.scale_y;
+    rigidObj["shear"] = rigid.shear;
     
     QJsonArray matrixArray;
     for (const auto &row : matrix3x3) {
@@ -315,7 +319,9 @@ void BackendClient::handleLoadLabelReply()
     result.rigid.theta_deg = rigid["theta_deg"].toDouble();
     result.rigid.tx = rigid["tx"].toDouble();
     result.rigid.ty = rigid["ty"].toDouble();
-    result.rigid.scale = rigid["scale"].toDouble();
+    result.rigid.scale_x = rigid["scale_x"].toDouble(1.0);
+    result.rigid.scale_y = rigid["scale_y"].toDouble(1.0);
+    result.rigid.shear = rigid["shear"].toDouble(0.0);
     
     // Parse matrix
     QJsonArray matrixArray = data["matrix_3x3"].toArray();

@@ -1,6 +1,6 @@
 # RigidLabeler Backend API Spec
 
-Version: `v0.1.0`  
+Version: `v0.1.1`  
 Base URL: `http://127.0.0.1:8000`
 
 ## 1. 总体约定
@@ -108,14 +108,16 @@ Base URL: `http://127.0.0.1:8000`
 
 ### 2.3 RigidParams
 
-2D 刚性变换参数（带可选统一缩放）。
+2D 变换参数（支持刚性、相似、仿射三种模式）。
 
 ```json
 {
   "theta_deg": 5.3,
   "tx": 12.4,
   "ty": -3.1,
-  "scale": 1.0
+  "scale_x": 1.05,
+  "scale_y": 0.98,
+  "shear": 0.02
 }
 ```
 
@@ -124,9 +126,14 @@ Base URL: `http://127.0.0.1:8000`
 * `theta_deg` *(float)*：逆时针旋转角度，单位为度
 * `tx` *(float)*：x 方向平移（列方向）
 * `ty` *(float)*：y 方向平移（行方向）
-* `scale` *(float)*：统一缩放因子，默认为 1.0
+* `scale_x` *(float)*：x 方向缩放因子，默认为 1.0
+* `scale_y` *(float)*：y 方向缩放因子，默认为 1.0
+* `shear` *(float)*：剪切因子，默认为 0.0
 
-  * 若 `allow_scale = false`，后端可强制返回 `scale = 1.0`
+> **变换模式说明**：
+> - **Rigid（刚性）**：仅使用 `theta_deg`, `tx`, `ty`，`scale_x = scale_y = 1.0`, `shear = 0`
+> - **Similarity（相似）**：使用 `theta_deg`, `tx`, `ty`, `scale_x = scale_y = scale`
+> - **Affine（仿射）**：使用全部 6 个参数
 
 ---
 
@@ -179,7 +186,7 @@ Base URL: `http://127.0.0.1:8000`
 
 ```json
 {
-  "version": "0.1.0",
+  "version": "0.1.1",
   "backend": "fastapi"
 }
 ```
@@ -254,7 +261,7 @@ Base URL: `http://127.0.0.1:8000`
   "message": "rigidlabeler backend alive",
   "error_code": null,
   "data": {
-    "version": "0.1.0",
+    "version": "0.1.1",
     "backend": "fastapi"
   }
 }
@@ -264,7 +271,7 @@ Base URL: `http://127.0.0.1:8000`
 
 ### 3.2 `POST /compute/rigid`
 
-**用途**：根据给定点对列表，计算 2D 刚性变换（可选带统一缩放）。
+**用途**：根据给定点对列表，计算 2D 变换（支持刚性、相似、仿射三种模式）。
 
 * **Method**: `POST`
 * **Path**: `/compute/rigid`
@@ -287,10 +294,14 @@ Base URL: `http://127.0.0.1:8000`
     {
       "fixed":  { "x": 200.0, "y": 150.0 },
       "moving": { "x": 210.3, "y": 143.2 }
+    },
+    {
+      "fixed":  { "x": 80.0, "y": 220.0 },
+      "moving": { "x": 85.5, "y": 215.8 }
     }
   ],
-  "allow_scale": false,
-  "min_points_required": 2
+  "transform_mode": "affine",
+  "min_points_required": 3
 }
 ```
 
@@ -299,14 +310,12 @@ Base URL: `http://127.0.0.1:8000`
 * `image_fixed` *(string)*：固定图像路径（用于后续一致性检查或日志记录，可选）
 * `image_moving` *(string)*：移动图像路径
 * `tie_points` *(TiePoint[])*：点对列表，必须 >= `min_points_required`
-* `allow_scale` *(bool)*：
-
-  * `false`：估计纯刚体（R + t）
-  * `true`：估计相似变换（sR + t）
-* `min_points_required` *(int)*：
-
-  * 若输入点对数小于此值，返回错误
-  * 一般 2 或 3 即可（建议在代码中给默认值）
+* `transform_mode` *(string)*：变换模式，可选值：
+  * `"rigid"`：刚性变换（旋转 + 平移），最少 2 个点
+  * `"similarity"`：相似变换（旋转 + 平移 + 均匀缩放），最少 2 个点
+  * `"affine"`：仿射变换（旋转 + 平移 + 非均匀缩放 + 剪切），最少 3 个点
+* `allow_scale` *(bool, deprecated)*：已弃用，请使用 `transform_mode`
+* `min_points_required` *(int)*：若输入点对数小于此值，返回错误
 
 #### Success Response (status = ok)
 
@@ -320,11 +329,13 @@ Base URL: `http://127.0.0.1:8000`
       "theta_deg": 5.3,
       "tx": 12.4,
       "ty": -3.1,
-      "scale": 1.0
+      "scale_x": 1.05,
+      "scale_y": 0.98,
+      "shear": 0.02
     },
     "matrix_3x3": [
-      [0.995, -0.099, 12.4],
-      [0.099,  0.995, -3.1],
+      [1.042, -0.117, 12.4],
+      [0.092,  0.978, -3.1],
       [0.0,    0.0,   1.0]
     ],
     "rms_error": 0.82,
@@ -617,7 +628,7 @@ GET /labels/load?image_fixed=data/images/vis_001.png&image_moving=data/images/ir
 
 ## 4. 版本管理与兼容性
 
-* 当前版本：`v0.1.0`，主要用于单机桌面工具开发与自用。
+* 当前版本：`v0.1.1`，主要用于单机桌面工具开发与自用。
 * 若未来调整字段或接口：
 
   * 建议保留向后兼容，或通过 URL 前缀进行版本划分，例如：`/api/v1/compute/rigid`。

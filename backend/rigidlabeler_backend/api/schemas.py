@@ -32,15 +32,28 @@ class TiePoint(BaseModel):
 
 
 class RigidParams(BaseModel):
-    """2D rigid transformation parameters (with optional uniform scale).
+    """2D affine transformation parameters.
     
     The transformation maps points from moving image to fixed image:
-    p_fixed = scale * R(theta) * p_moving + [tx, ty]
+    p_fixed = A * p_moving + [tx, ty]
+    
+    Where A encodes rotation and non-uniform scaling.
     """
     theta_deg: float = Field(..., description="Counter-clockwise rotation angle in degrees")
     tx: float = Field(..., description="Translation in x (column) direction, pixels")
     ty: float = Field(..., description="Translation in y (row) direction, pixels")
-    scale: float = Field(default=1.0, description="Uniform scale factor (1.0 for pure rigid)")
+    scale_x: float = Field(default=1.0, description="Scale factor in x direction")
+    scale_y: float = Field(default=1.0, description="Scale factor in y direction")
+    shear: float = Field(default=0.0, description="Shear factor")
+    
+    # Keep 'scale' for backward compatibility (average of scale_x and scale_y)
+    @property
+    def scale(self) -> float:
+        return (self.scale_x + self.scale_y) / 2.0
+
+
+# Alias for backward compatibility
+AffineParams = RigidParams
 
 
 class LabelMeta(BaseModel):
@@ -147,9 +160,13 @@ class ComputeRigidRequest(BaseModel):
         description="Moving image path (optional, for logging)"
     )
     tie_points: List[TiePoint] = Field(..., description="List of tie points")
+    transform_mode: str = Field(
+        default="affine",
+        description="Transform mode: 'rigid' (rotation+translation), 'similarity' (rigid+uniform scale), or 'affine' (full 6-DOF)"
+    )
     allow_scale: bool = Field(
         default=False,
-        description="If true, estimate similarity transform (R + scale + t)"
+        description="DEPRECATED: Use transform_mode instead. If true, use similarity; if false, use rigid."
     )
     min_points_required: int = Field(
         default=2,

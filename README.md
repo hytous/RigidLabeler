@@ -1,16 +1,20 @@
 # RigidLabeler
 
-A lightweight desktop tool for **2D rigid transformation labeling** (rotation + translation [+ optional uniform scale]) built with **Qt C++ frontend** and **FastAPI Python backend**.
+A lightweight desktop tool for **2D geometric transformation labeling** (Rigid / Similarity / Affine) built with **Qt C++ frontend** and **FastAPI Python backend**.
 
-> 简单说：这是一个用来给两张 2D 图像"打刚性配准矩阵标签"的小工具，方便后续深度学习训练和算法评测。
+> 简单说：这是一个用来给两张 2D 图像"打配准变换矩阵标签"的小工具，方便后续深度学习训练和算法评测。
 
 ---
 
 ## ✨ Features
 
-- 🎯 **2D 刚性变换标注**
-  - 支持通过人工点选对应点，拟合出两张图像之间的 2D 刚性变换
-  - 输出旋转角度 `θ`、平移 `(tx, ty)`、尺度`scale`，以及 3×3 齐次变换矩阵
+- 🎯 **2D 几何变换标注**
+  - 支持通过人工点选对应点，拟合出两张图像之间的 2D 变换
+  - **三种变换模式**：
+    - **刚性 (Rigid)**：旋转 + 平移（最少 2 个点）
+    - **相似 (Similarity)**：旋转 + 平移 + 均匀缩放（最少 2 个点）
+    - **仿射 (Affine)**：旋转 + 平移 + 非均匀缩放 + 剪切（最少 3 个点）
+  - 输出旋转角度 `θ`、平移 `(tx, ty)`、缩放 `(scale_x, scale_y)`、剪切 `shear`，以及 3×3 齐次变换矩阵
 
 - 🖱️ **交互式点对标注**
   - 左右双视图显示 Fixed / Moving 图像
@@ -37,8 +41,8 @@ A lightweight desktop tool for **2D rigid transformation labeling** (rotation + 
   - 双视图缩放/平移同步选项
 
 - 📐 **稳健的变换估计**
-  - 使用质心对齐 + SVD（Procrustes 分析）估计刚性变换
-  - 支持可选的 **uniform scale**（旋转 + 等比缩放 + 平移）
+  - 使用质心对齐 + SVD（Procrustes 分析）估计几何变换
+  - 支持 **仿射变换分解**：通过 SVD 分解提取旋转、缩放和剪切分量
 
 - 💾 **统一标签格式**
   - 标签使用 JSON 格式保存

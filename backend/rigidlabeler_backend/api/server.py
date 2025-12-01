@@ -25,7 +25,8 @@ from .schemas import (
 )
 from ..config import get_config
 from ..core.transforms import (
-    compute_rigid_transform, 
+    compute_rigid_transform,
+    compute_transform,
     TransformEstimationError,
     rigid_params_to_matrix
 )
@@ -99,17 +100,32 @@ async def health_check():
 
 @app.post("/compute/rigid", response_model=ApiResponse)
 async def compute_rigid(request: ComputeRigidRequest):
-    """Compute 2D rigid transformation from tie points.
+    """Compute 2D transformation from tie points.
     
-    Uses Procrustes analysis (centroid alignment + SVD) to estimate
-    the optimal rigid transformation mapping moving points to fixed points.
+    Supports three transform modes:
+    - rigid: rotation + translation (2 points minimum)
+    - similarity: rotation + translation + uniform scale (2 points minimum)
+    - affine: full 6-DOF transformation (3 points minimum)
     """
-    # Validate minimum points
-    if len(request.tie_points) < request.min_points_required:
+    # Determine transform mode
+    # If transform_mode is explicitly set, use it; otherwise fall back to allow_scale
+    if hasattr(request, 'transform_mode') and request.transform_mode:
+        mode = request.transform_mode.lower()
+    else:
+        # Backward compatibility
+        mode = "similarity" if request.allow_scale else "rigid"
+    
+    # Validate minimum points based on mode
+    if mode == "affine":
+        min_required = max(request.min_points_required, 3)
+    else:
+        min_required = max(request.min_points_required, 2)
+    
+    if len(request.tie_points) < min_required:
         return ApiResponse.error(
             ErrorCode.NOT_ENOUGH_POINTS,
-            f"Not enough points to estimate rigid transform "
-            f"(got {len(request.tie_points)}, need at least {request.min_points_required})"
+            f"Not enough points to estimate {mode} transform "
+            f"(got {len(request.tie_points)}, need at least {min_required})"
         )
     
     # Extract point coordinates
@@ -121,10 +137,10 @@ async def compute_rigid(request: ComputeRigidRequest):
     ])
     
     try:
-        result = compute_rigid_transform(
+        result = compute_transform(
             fixed_points=fixed_points,
             moving_points=moving_points,
-            allow_scale=request.allow_scale
+            mode=mode
         )
         
         return ApiResponse.ok(
@@ -133,7 +149,9 @@ async def compute_rigid(request: ComputeRigidRequest):
                     theta_deg=result.theta_deg,
                     tx=result.tx,
                     ty=result.ty,
-                    scale=result.scale
+                    scale_x=result.scale_x,
+                    scale_y=result.scale_y,
+                    shear=result.shear
                 ),
                 matrix_3x3=result.matrix_3x3.tolist(),
                 rms_error=result.rms_error,

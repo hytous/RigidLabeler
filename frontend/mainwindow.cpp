@@ -99,6 +99,20 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
     
+    // Setup transform mode combo box with tooltips
+    ui->cmbTransformMode->setItemData(0, 
+        tr("Rigid: Rotation + Translation only\n"
+           "Parameters: θ (rotation), tx, ty (translation)\n"
+           "Minimum points: 2"), Qt::ToolTipRole);
+    ui->cmbTransformMode->setItemData(1, 
+        tr("Similarity: Rotation + Translation + Uniform Scale\n"
+           "Parameters: θ (rotation), tx, ty (translation), scale\n"
+           "Minimum points: 2"), Qt::ToolTipRole);
+    ui->cmbTransformMode->setItemData(2, 
+        tr("Affine: Full 6-DOF transformation\n"
+           "Parameters: θ (rotation), tx, ty (translation), scale_x, scale_y, shear\n"
+           "Minimum points: 3"), Qt::ToolTipRole);
+    
     // Initialize real-time compute timer (10 seconds)
     m_realtimeComputeTimer->setSingleShot(true);
     m_realtimeComputeTimer->setInterval(10000);  // 10 seconds
@@ -225,6 +239,8 @@ void MainWindow::setupConnections()
     // Options
     connect(ui->chkOriginTopLeft, &QCheckBox::toggled, this, &MainWindow::onOriginModeToggled);
     connect(ui->chkRealtimeCompute, &QCheckBox::toggled, this, &MainWindow::onRealtimeComputeToggled);
+    connect(ui->cmbTransformMode, QOverload<int>::of(&QComboBox::currentIndexChanged), 
+            this, &MainWindow::updateActionStates);
     
     // Real-time compute timer
     connect(m_realtimeComputeTimer, &QTimer::timeout, this, &MainWindow::onRealtimeComputeTimeout);
@@ -558,7 +574,9 @@ void MainWindow::saveLabel()
     rigid.theta_deg = m_currentTheta;
     rigid.tx = m_currentTx;
     rigid.ty = m_currentTy;
-    rigid.scale = m_currentScale;
+    rigid.scale_x = m_currentScaleX;
+    rigid.scale_y = m_currentScaleY;
+    rigid.shear = m_currentShear;
     
     m_backendClient->saveLabel(
         m_imagePairModel->fixedImagePath(),
@@ -636,9 +654,19 @@ void MainWindow::computeTransform()
         tiePoints.append({fixed, moving});
     }
     
+    // Get transform mode from combo box
+    QString transformMode;
+    int modeIndex = ui->cmbTransformMode->currentIndex();
+    switch (modeIndex) {
+        case 0: transformMode = "rigid"; break;
+        case 1: transformMode = "similarity"; break;
+        case 2: 
+        default: transformMode = "affine"; break;
+    }
+    
     m_backendClient->computeRigid(
         tiePoints,
-        ui->chkAllowScale->isChecked(),
+        transformMode,
         minPoints
     );
     
@@ -887,14 +915,20 @@ void MainWindow::onComputeRigidCompleted(const ComputeRigidResult &result)
     m_currentTheta = result.rigid.theta_deg;
     m_currentTx = result.rigid.tx;
     m_currentTy = result.rigid.ty;
-    m_currentScale = result.rigid.scale;
+    m_currentScaleX = result.rigid.scale_x;
+    m_currentScaleY = result.rigid.scale_y;
+    m_currentShear = result.rigid.shear;
     m_currentMatrix = result.matrix3x3;
     
     // Display results
     QString resultText;
     resultText += tr("Rotation: %1°\n").arg(result.rigid.theta_deg, 0, 'f', 4);
     resultText += tr("Translation: (%1, %2)\n").arg(result.rigid.tx, 0, 'f', 4).arg(result.rigid.ty, 0, 'f', 4);
-    resultText += tr("Scale: %1\n").arg(result.rigid.scale, 0, 'f', 6);
+    resultText += tr("Scale X: %1\n").arg(result.rigid.scale_x, 0, 'f', 6);
+    resultText += tr("Scale Y: %1\n").arg(result.rigid.scale_y, 0, 'f', 6);
+    if (qAbs(result.rigid.shear) > 1e-6) {
+        resultText += tr("Shear: %1\n").arg(result.rigid.shear, 0, 'f', 6);
+    }
     resultText += tr("RMS Error: %1 px\n").arg(result.rmsError, 0, 'f', 4);
     resultText += tr("Points Used: %1\n\n").arg(result.numPoints);
     resultText += tr("Matrix:\n");
@@ -943,14 +977,20 @@ void MainWindow::onLoadLabelCompleted(const LabelData &result)
     m_currentTheta = result.rigid.theta_deg;
     m_currentTx = result.rigid.tx;
     m_currentTy = result.rigid.ty;
-    m_currentScale = result.rigid.scale;
+    m_currentScaleX = result.rigid.scale_x;
+    m_currentScaleY = result.rigid.scale_y;
+    m_currentShear = result.rigid.shear;
     m_currentMatrix = result.matrix3x3;
     
     // Display results
     QString resultText;
     resultText += tr("Rotation: %1°\n").arg(result.rigid.theta_deg, 0, 'f', 4);
     resultText += tr("Translation: (%1, %2)\n").arg(result.rigid.tx, 0, 'f', 4).arg(result.rigid.ty, 0, 'f', 4);
-    resultText += tr("Scale: %1\n").arg(result.rigid.scale, 0, 'f', 6);
+    resultText += tr("Scale X: %1\n").arg(result.rigid.scale_x, 0, 'f', 6);
+    resultText += tr("Scale Y: %1\n").arg(result.rigid.scale_y, 0, 'f', 6);
+    if (qAbs(result.rigid.shear) > 1e-6) {
+        resultText += tr("Shear: %1\n").arg(result.rigid.shear, 0, 'f', 6);
+    }
     resultText += tr("\n(Loaded from saved label)");
     
     ui->txtResult->setText(resultText);
@@ -1014,13 +1054,13 @@ void MainWindow::showAbout()
 {
     QMessageBox::about(this, tr("About RigidLabeler"),
         tr("<h2>RigidLabeler</h2>"
-           "<p>A 2D rigid transformation labeling tool.</p>"
-           "<p>Version 1.0</p>"
+           "<p>A 2D geometric transformation labeling tool.</p>"
+           "<p>Version 0.1.1</p>"
            "<p>This tool allows you to:</p>"
            "<ul>"
            "<li>Load image pairs (fixed and moving)</li>"
            "<li>Define tie points between images</li>"
-           "<li>Compute rigid/similarity transforms</li>"
+           "<li>Compute rigid/similarity/affine transforms</li>"
            "<li>Save and load transformation labels</li>"
            "</ul>"));
 }
@@ -1227,7 +1267,11 @@ void MainWindow::updateActionStates()
     bool hasBothImages = m_imagePairModel->hasBothImages();
     int pointCount = m_tiePointModel->completePairCount();  // Use complete pairs for compute
     int totalCount = m_tiePointModel->pairCount();
-    int minPoints = AppConfig::instance().minPointsRequired();
+    
+    // Determine minimum points based on transform mode
+    int modeIndex = ui->cmbTransformMode->currentIndex();
+    int minPoints = (modeIndex == 2) ? 3 : 2;  // Affine needs 3, others need 2
+    minPoints = qMax(minPoints, AppConfig::instance().minPointsRequired());
     
     // Update actions from .ui file
     ui->actionCompute->setEnabled(hasBothImages && pointCount >= minPoints);
