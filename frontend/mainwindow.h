@@ -163,6 +163,11 @@ private:
     void updateCursorMarker(QGraphicsScene *scene, const QPointF &pos);
     void clearCursorMarker();
     QColor getNextPointColor() const;
+    
+    // Project cache helpers
+    void saveProjectState();
+    void restoreLastProject();
+    void closeEvent(QCloseEvent *event) override;
 
 private:
     Ui::MainWindow *ui;

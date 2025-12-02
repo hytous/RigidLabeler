@@ -19,6 +19,7 @@
 #include <QWheelEvent>
 #include <QMouseEvent>
 #include <QKeyEvent>
+#include <QCloseEvent>
 #include <QRubberBand>
 #include <QUndoStack>
 #include <QTextStream>
@@ -151,6 +152,36 @@ MainWindow::MainWindow(QWidget *parent)
         "QTableView::item:selected:focus { background-color: #0078d7; color: white; }"
     );
     
+    // Restore UI options from settings (BEFORE setupConnections to avoid triggering saves)
+    ui->chkOriginTopLeft->setChecked(AppConfig::instance().optionOriginTopLeft());
+    m_useTopLeftOrigin = AppConfig::instance().optionOriginTopLeft();
+    ui->chkShowPointLabels->setChecked(AppConfig::instance().optionShowPointLabels());
+    m_showPointLabels = AppConfig::instance().optionShowPointLabels();
+    ui->chkSyncZoom->setChecked(AppConfig::instance().optionSyncZoom());
+    ui->cmbTransformMode->setCurrentIndex(AppConfig::instance().optionTransformMode());
+    
+    // Restore language setting
+    QString savedLang = AppConfig::instance().optionLanguage();
+    if (savedLang == "en") {
+        m_currentLanguage = "en";
+        ui->actionLangEnglish->setChecked(true);
+        ui->actionLangChinese->setChecked(false);
+        // English is default, no need to load translator
+    } else {
+        // Default to Chinese
+        m_currentLanguage = "zh";
+        ui->actionLangEnglish->setChecked(false);
+        ui->actionLangChinese->setChecked(true);
+        // Load Chinese translation
+        QString translationPath = QCoreApplication::applicationDirPath() + "/translations/rigidlabeler_zh.qm";
+        if (!QFile::exists(translationPath)) {
+            translationPath = ":/translations/rigidlabeler_zh.qm";
+        }
+        if (m_translator->load(translationPath) || m_translator->load("rigidlabeler_zh", ":/translations")) {
+            qApp->installTranslator(m_translator);
+        }
+    }
+    
     setupConnections();
     
     // Setup status bar labels
@@ -166,6 +197,9 @@ MainWindow::MainWindow(QWidget *parent)
     
     // Check backend health
     m_backendClient->healthCheck();
+    
+    // Restore last project (delayed to ensure UI is ready)
+    QTimer::singleShot(100, this, &MainWindow::restoreLastProject);
 }
 
 MainWindow::~MainWindow()
@@ -218,9 +252,15 @@ void MainWindow::setupConnections()
     connect(ui->actionUndo, &QAction::triggered, this, &MainWindow::undo);
     connect(ui->actionRedo, &QAction::triggered, this, &MainWindow::redo);
     
-    // Language actions
-    connect(ui->actionLangEnglish, &QAction::triggered, this, &MainWindow::switchToEnglish);
-    connect(ui->actionLangChinese, &QAction::triggered, this, &MainWindow::switchToChinese);
+    // Language actions (with auto-save)
+    connect(ui->actionLangEnglish, &QAction::triggered, this, [this]() {
+        switchToEnglish();
+        AppConfig::instance().setOptionLanguage("en");
+    });
+    connect(ui->actionLangChinese, &QAction::triggered, this, [this]() {
+        switchToChinese();
+        AppConfig::instance().setOptionLanguage("zh");
+    });
     
     // Panel buttons
     connect(ui->btnLoadFixed, &QPushButton::clicked, this, &MainWindow::loadFixedImage);
@@ -245,14 +285,24 @@ void MainWindow::setupConnections()
     connect(ui->btnExportMatrix, &QPushButton::clicked, this, &MainWindow::exportMatrix);
     
     // Options
-    connect(ui->chkOriginTopLeft, &QCheckBox::toggled, this, &MainWindow::onOriginModeToggled);
+    connect(ui->chkOriginTopLeft, &QCheckBox::toggled, this, [this](bool checked) {
+        onOriginModeToggled(checked);
+        AppConfig::instance().setOptionOriginTopLeft(checked);
+    });
     connect(ui->chkRealtimeCompute, &QCheckBox::toggled, this, &MainWindow::onRealtimeComputeToggled);
     connect(ui->chkShowPointLabels, &QCheckBox::toggled, this, [this](bool checked) {
         m_showPointLabels = checked;
         updatePointDisplay();
+        AppConfig::instance().setOptionShowPointLabels(checked);
+    });
+    connect(ui->chkSyncZoom, &QCheckBox::toggled, this, [this](bool checked) {
+        AppConfig::instance().setOptionSyncZoom(checked);
     });
     connect(ui->cmbTransformMode, QOverload<int>::of(&QComboBox::currentIndexChanged), 
-            this, &MainWindow::updateActionStates);
+            this, [this](int index) {
+        updateActionStates();
+        AppConfig::instance().setOptionTransformMode(index);
+    });
     
     // Real-time compute timer
     connect(m_realtimeComputeTimer, &QTimer::timeout, this, &MainWindow::onRealtimeComputeTimeout);
@@ -2129,10 +2179,13 @@ void MainWindow::exportTiePoints()
 
 void MainWindow::importTiePoints()
 {
+    // Use tie points export directory as default import path
+    QString defaultDir = m_tiePointsExportDir.isEmpty() ? QString() : m_tiePointsExportDir;
+    
     QString fileName = QFileDialog::getOpenFileName(
         this,
         tr("Import Tie Points"),
-        QString(),
+        defaultDir,
         tr("CSV Files (*.csv);;All Files (*)")
     );
     
@@ -2255,4 +2308,177 @@ void MainWindow::updateTiePointModelCoordinateOffsets()
     }
     
     m_tiePointModel->setDisplayCoordinateOffset(fixedOffset, movingOffset);
+}
+
+// ============================================================================
+// Project Cache
+// ============================================================================
+
+void MainWindow::saveProjectState()
+{
+    // Only save if we have a valid fixed image directory
+    if (m_fixedImageDir.isEmpty())
+        return;
+    
+    AppConfig::instance().saveProjectState(
+        m_fixedImageDir,
+        m_fixedImageIndex,
+        m_movingImageIndex,
+        m_movingImageDir,
+        m_matrixExportDir,
+        m_tiePointsExportDir
+    );
+    
+    // Save tie points to a cache file
+    if (m_tiePointModel->pairCount() > 0) {
+        // Create cache directory if needed
+        QString cacheDir = m_fixedImageDir + "/.rigidlabeler_cache";
+        QDir().mkpath(cacheDir);
+        
+        // Get current fixed image name for the cache file
+        QString cacheFileName;
+        if (m_fixedImageIndex >= 0 && m_fixedImageIndex < m_fixedImageFiles.size()) {
+            QFileInfo fi(m_fixedImageFiles[m_fixedImageIndex]);
+            cacheFileName = cacheDir + "/" + fi.baseName() + "_tiepoints.csv";
+        } else {
+            cacheFileName = cacheDir + "/tiepoints.csv";
+        }
+        
+        QFile file(cacheFileName);
+        if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            QTextStream out(&file);
+            out << "# RigidLabeler Tie Points Cache\n";
+            out << "# Format: fixed_x, fixed_y, moving_x, moving_y (pixel coords)\n";
+            
+            QList<TiePointPair> pairs = m_tiePointModel->getAllPairs();
+            for (const TiePointPair &pair : pairs) {
+                // Save all pairs, including partial ones
+                QString fx = pair.hasFixed() ? QString::number(pair.fixed->x()) : "";
+                QString fy = pair.hasFixed() ? QString::number(pair.fixed->y()) : "";
+                QString mx = pair.hasMoving() ? QString::number(pair.moving->x()) : "";
+                QString my = pair.hasMoving() ? QString::number(pair.moving->y()) : "";
+                out << fx << "," << fy << "," << mx << "," << my << "\n";
+            }
+            file.close();
+        }
+    }
+}
+
+void MainWindow::restoreLastProject()
+{
+    QString lastProject = AppConfig::instance().lastProjectDir();
+    if (lastProject.isEmpty())
+        return;
+    
+    int fixedIndex = 0, movingIndex = 0;
+    QString movingDir, matrixDir, tiePointsDir;
+    
+    if (!AppConfig::instance().loadProjectState(lastProject, fixedIndex, movingIndex,
+                                                  movingDir, matrixDir, tiePointsDir)) {
+        return;
+    }
+    
+    // Check if the directories still exist
+    if (!QDir(lastProject).exists())
+        return;
+    
+    // Restore fixed image directory and load file list
+    m_fixedImageDir = lastProject;
+    m_fixedImageFiles = getImageFilesInDir(m_fixedImageDir);
+    
+    if (m_fixedImageFiles.isEmpty())
+        return;
+    
+    // Clamp indices to valid range
+    fixedIndex = qBound(0, fixedIndex, m_fixedImageFiles.size() - 1);
+    
+    // Load fixed image
+    loadFixedImageByIndex(fixedIndex);
+    
+    // Restore moving image if directory exists
+    if (!movingDir.isEmpty() && QDir(movingDir).exists()) {
+        m_movingImageDir = movingDir;
+        m_movingImageFiles = getImageFilesInDir(m_movingImageDir);
+        
+        if (!m_movingImageFiles.isEmpty()) {
+            movingIndex = qBound(0, movingIndex, m_movingImageFiles.size() - 1);
+            loadMovingImageByIndex(movingIndex);
+        }
+    }
+    
+    // Restore export directories
+    if (!matrixDir.isEmpty() && QDir(matrixDir).exists()) {
+        m_matrixExportDir = matrixDir;
+    }
+    if (!tiePointsDir.isEmpty() && QDir(tiePointsDir).exists()) {
+        m_tiePointsExportDir = tiePointsDir;
+    }
+    
+    // Restore tie points from cache file
+    QString cacheDir = m_fixedImageDir + "/.rigidlabeler_cache";
+    QString cacheFileName;
+    if (m_fixedImageIndex >= 0 && m_fixedImageIndex < m_fixedImageFiles.size()) {
+        QFileInfo fi(m_fixedImageFiles[m_fixedImageIndex]);
+        cacheFileName = cacheDir + "/" + fi.baseName() + "_tiepoints.csv";
+    } else {
+        cacheFileName = cacheDir + "/tiepoints.csv";
+    }
+    
+    QFile cacheFile(cacheFileName);
+    if (cacheFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QTextStream in(&cacheFile);
+        int restoredCount = 0;
+        
+        while (!in.atEnd()) {
+            QString line = in.readLine().trimmed();
+            if (line.isEmpty() || line.startsWith('#'))
+                continue;
+            
+            QStringList parts = line.split(',');
+            if (parts.size() < 4)
+                continue;
+            
+            // Parse coordinates (may be empty for partial pairs)
+            bool hasFx = false, hasFy = false, hasMx = false, hasMy = false;
+            double fx = parts[0].trimmed().toDouble(&hasFx);
+            double fy = parts[1].trimmed().toDouble(&hasFy);
+            double mx = parts[2].trimmed().toDouble(&hasMx);
+            double my = parts[3].trimmed().toDouble(&hasMy);
+            
+            // Empty strings will make toDouble return false
+            hasFx = hasFx && !parts[0].trimmed().isEmpty();
+            hasFy = hasFy && !parts[1].trimmed().isEmpty();
+            hasMx = hasMx && !parts[2].trimmed().isEmpty();
+            hasMy = hasMy && !parts[3].trimmed().isEmpty();
+            
+            if (hasFx && hasFy && hasMx && hasMy) {
+                // Complete pair
+                m_tiePointModel->addTiePoint(QPointF(fx, fy), QPointF(mx, my));
+                restoredCount++;
+            } else if (hasFx && hasFy) {
+                // Only fixed point
+                m_tiePointModel->addFixedPoint(QPointF(fx, fy));
+                restoredCount++;
+            } else if (hasMx && hasMy) {
+                // Only moving point (shouldn't happen normally)
+                restoredCount++;
+            }
+        }
+        cacheFile.close();
+        
+        if (restoredCount > 0) {
+            updatePointDisplay();
+            updateActionStates();
+        }
+    }
+    
+    statusBar()->showMessage(tr("Restored last project: %1").arg(m_fixedImageDir), 3000);
+}
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    // Save project state before closing
+    saveProjectState();
+    
+    QMainWindow::closeEvent(event);
 }

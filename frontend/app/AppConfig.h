@@ -43,6 +43,35 @@ public:
     // GT export settings
     QString lastGTExportDir() const;
     void setLastGTExportDir(const QString &dir);
+    
+    // Project cache (keyed by fixed image directory)
+    // Saves and restores working state for each project
+    void saveProjectState(const QString &fixedImageDir, 
+                          int fixedIndex, int movingIndex,
+                          const QString &movingImageDir,
+                          const QString &matrixExportDir,
+                          const QString &tiePointsExportDir);
+    bool loadProjectState(const QString &fixedImageDir,
+                          int &fixedIndex, int &movingIndex,
+                          QString &movingImageDir,
+                          QString &matrixExportDir,
+                          QString &tiePointsExportDir);
+    
+    // Last opened project
+    QString lastProjectDir() const;
+    void setLastProjectDir(const QString &dir);
+    
+    // UI Options state (persistent across sessions)
+    bool optionOriginTopLeft() const;
+    void setOptionOriginTopLeft(bool value);
+    bool optionShowPointLabels() const;
+    void setOptionShowPointLabels(bool value);
+    bool optionSyncZoom() const;
+    void setOptionSyncZoom(bool value);
+    int optionTransformMode() const;
+    void setOptionTransformMode(int mode);
+    QString optionLanguage() const;
+    void setOptionLanguage(const QString &lang);
 
 private:
     AppConfig();

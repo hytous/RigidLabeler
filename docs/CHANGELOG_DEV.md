@@ -4,6 +4,134 @@
 
 ---
 
+## #022 - 2025-12-02
+
+### 需求
+保存并恢复语言设置（中文/英文）。
+
+### 实现
+
+#### AppConfig 扩展
+- `optionLanguage()` / `setOptionLanguage()` - 存取语言代码 ("zh" / "en")
+
+#### 启动时恢复
+在构造函数中根据保存的语言设置加载翻译文件：
+```cpp
+QString savedLang = AppConfig::instance().optionLanguage();
+if (savedLang == "en") {
+    m_currentLanguage = "en";
+    ui->actionLangEnglish->setChecked(true);
+} else {
+    m_currentLanguage = "zh";
+    ui->actionLangChinese->setChecked(true);
+    // Load Chinese translation
+    m_translator->load("rigidlabeler_zh", ...);
+    qApp->installTranslator(m_translator);
+}
+```
+
+#### 切换时保存
+修改语言切换 Action 的信号连接，切换后自动保存语言设置。
+
+---
+
+## #021 - 2025-12-02
+
+### 需求
+保存并恢复 Options 区域的选项状态，包括：
+- 坐标原点模式（Top-Left / Center）
+- 显示点标签
+- 同步缩放
+- 变换模式（Rigid / Similarity / Affine）
+
+### 实现
+
+#### AppConfig 扩展
+添加 UI 选项的存取方法：
+- `optionOriginTopLeft()` / `setOptionOriginTopLeft()`
+- `optionShowPointLabels()` / `setOptionShowPointLabels()`
+- `optionSyncZoom()` / `setOptionSyncZoom()`
+- `optionTransformMode()` / `setOptionTransformMode()`
+
+#### 启动时恢复
+在 `MainWindow` 构造函数中，`setupConnections()` 之前恢复选项状态：
+```cpp
+ui->chkOriginTopLeft->setChecked(AppConfig::instance().optionOriginTopLeft());
+ui->chkShowPointLabels->setChecked(AppConfig::instance().optionShowPointLabels());
+ui->chkSyncZoom->setChecked(AppConfig::instance().optionSyncZoom());
+ui->cmbTransformMode->setCurrentIndex(AppConfig::instance().optionTransformMode());
+```
+
+#### 变更时保存
+修改各选项的信号连接，在状态变化时自动保存到 `QSettings`。
+
+### 技术细节
+- 在 `setupConnections()` 之前设置控件状态，避免触发保存逻辑
+- 同时更新成员变量 `m_useTopLeftOrigin` 和 `m_showPointLabels`
+
+---
+
+## #020 - 2025-12-02
+
+### 需求
+扩展工程缓存功能：
+1. 保存并恢复上次的点对数据
+2. 导入点对时默认使用上次导出点对的目录
+
+### 实现
+
+#### 点对缓存
+- 在 `saveProjectState()` 中，将当前点对保存到隐藏缓存目录
+- 缓存文件路径：`{固定图像目录}/.rigidlabeler_cache/{图像名}_tiepoints.csv`
+- 保存格式：`fixed_x, fixed_y, moving_x, moving_y`（像素坐标）
+- 支持部分点对（只有固定点或只有动态点）
+
+#### 点对恢复
+- 在 `restoreLastProject()` 中加载缓存的点对文件
+- 自动调用 `updatePointDisplay()` 和 `updateActionStates()` 更新界面
+
+#### 导入路径默认值
+- 修改 `importTiePoints()` 函数
+- 使用 `m_tiePointsExportDir` 作为文件对话框的默认目录
+- 实现导出/导入路径的统一
+
+---
+
+## #019 - 2025-12-02
+
+### 需求
+实现工程缓存功能，类似 PyCharm/VSCode 的工作区记忆：
+1. 记住当前正在标注的数据集路径和图像索引
+2. 记住导出目录等工作状态
+3. 下次打开软件自动恢复上次的工作进度
+
+### 实现
+
+#### AppConfig 扩展
+在 `AppConfig` 类中添加工程状态保存/加载方法：
+- `saveProjectState()` - 以固定图像目录为 key，保存工程状态
+- `loadProjectState()` - 加载指定目录的工程状态
+- `lastProjectDir()` / `setLastProjectDir()` - 记录最后打开的工程
+
+#### 工程状态数据
+每个工程保存以下信息：
+- 固定图像目录和当前索引
+- 动态图像目录和当前索引
+- 矩阵导出目录
+- 点对导出目录
+
+#### MainWindow 生命周期
+- 构造函数末尾调用 `restoreLastProject()` 恢复上次工程
+- 重写 `closeEvent()` 在关闭时调用 `saveProjectState()` 保存状态
+
+### 技术细节
+- 使用 `QSettings` 存储工程缓存，按目录路径作为 key
+- 目录路径中的特殊字符 (`/`, `\`, `:`) 替换为 `_` 作为 key
+- 恢复时验证目录是否存在，索引是否有效
+- 使用 `QTimer::singleShot(100, ...)` 延迟恢复确保 UI 就绪
+
+---
+
 ## #018 - 2025-12-02
 
 ### 需求
@@ -21,23 +149,6 @@
 - 使用 `<span style='color:...'>` 标签为 RMS Error 行添加颜色
 - 使用 `<pre>` 标签保持等宽字体排版
 - 将换行符 `\n` 替换为 `<br>` 以适应 HTML
-
-### 代码
-```cpp
-QString rmsColor;
-if (result.rmsError < 1.0) {
-    rmsColor = "#00aa00";  // Green - excellent
-} else if (result.rmsError < 3.0) {
-    rmsColor = "#00aaaa";  // Cyan - good
-} else if (result.rmsError < 4.0) {
-    rmsColor = "#ff8800";  // Orange - warning
-} else {
-    rmsColor = "#ff0000";  // Red - poor
-}
-resultText += QString("<span style='color:%1; font-weight:bold;'>%2</span>\n")
-    .arg(rmsColor)
-    .arg(tr("RMS Error: %1 px").arg(result.rmsError, 0, 'f', 4));
-```
 
 ---
 

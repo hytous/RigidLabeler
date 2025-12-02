@@ -156,3 +156,136 @@ void AppConfig::setLastGTExportDir(const QString &dir)
         m_settings->setValue("lastGTExportDir", dir);
     }
 }
+
+// ============================================================================
+// Project Cache
+// ============================================================================
+
+void AppConfig::saveProjectState(const QString &fixedImageDir,
+                                  int fixedIndex, int movingIndex,
+                                  const QString &movingImageDir,
+                                  const QString &matrixExportDir,
+                                  const QString &tiePointsExportDir)
+{
+    if (!m_rememberLastDir || fixedImageDir.isEmpty())
+        return;
+    
+    // Use fixed image directory as project key
+    // Create a unique key based on path (replace special characters)
+    QString projectKey = fixedImageDir;
+    projectKey.replace("/", "_").replace("\\", "_").replace(":", "_");
+    
+    m_settings->beginGroup("Projects/" + projectKey);
+    m_settings->setValue("fixedImageDir", fixedImageDir);
+    m_settings->setValue("fixedIndex", fixedIndex);
+    m_settings->setValue("movingIndex", movingIndex);
+    m_settings->setValue("movingImageDir", movingImageDir);
+    m_settings->setValue("matrixExportDir", matrixExportDir);
+    m_settings->setValue("tiePointsExportDir", tiePointsExportDir);
+    m_settings->endGroup();
+    
+    // Also save as last project
+    setLastProjectDir(fixedImageDir);
+}
+
+bool AppConfig::loadProjectState(const QString &fixedImageDir,
+                                  int &fixedIndex, int &movingIndex,
+                                  QString &movingImageDir,
+                                  QString &matrixExportDir,
+                                  QString &tiePointsExportDir)
+{
+    if (!m_rememberLastDir || fixedImageDir.isEmpty())
+        return false;
+    
+    QString projectKey = fixedImageDir;
+    projectKey.replace("/", "_").replace("\\", "_").replace(":", "_");
+    
+    m_settings->beginGroup("Projects/" + projectKey);
+    
+    // Check if this project exists
+    if (!m_settings->contains("fixedImageDir")) {
+        m_settings->endGroup();
+        return false;
+    }
+    
+    fixedIndex = m_settings->value("fixedIndex", 0).toInt();
+    movingIndex = m_settings->value("movingIndex", 0).toInt();
+    movingImageDir = m_settings->value("movingImageDir", "").toString();
+    matrixExportDir = m_settings->value("matrixExportDir", "").toString();
+    tiePointsExportDir = m_settings->value("tiePointsExportDir", "").toString();
+    
+    m_settings->endGroup();
+    return true;
+}
+
+QString AppConfig::lastProjectDir() const
+{
+    if (!m_rememberLastDir)
+        return QString();
+    
+    QString dir = m_settings->value("lastProjectDir", "").toString();
+    if (!dir.isEmpty() && QDir(dir).exists())
+        return dir;
+    return QString();
+}
+
+void AppConfig::setLastProjectDir(const QString &dir)
+{
+    if (m_rememberLastDir) {
+        m_settings->setValue("lastProjectDir", dir);
+    }
+}
+
+// ============================================================================
+// UI Options State
+// ============================================================================
+
+bool AppConfig::optionOriginTopLeft() const
+{
+    return m_settings->value("options/originTopLeft", false).toBool();
+}
+
+void AppConfig::setOptionOriginTopLeft(bool value)
+{
+    m_settings->setValue("options/originTopLeft", value);
+}
+
+bool AppConfig::optionShowPointLabels() const
+{
+    return m_settings->value("options/showPointLabels", true).toBool();
+}
+
+void AppConfig::setOptionShowPointLabels(bool value)
+{
+    m_settings->setValue("options/showPointLabels", value);
+}
+
+bool AppConfig::optionSyncZoom() const
+{
+    return m_settings->value("options/syncZoom", true).toBool();
+}
+
+void AppConfig::setOptionSyncZoom(bool value)
+{
+    m_settings->setValue("options/syncZoom", value);
+}
+
+int AppConfig::optionTransformMode() const
+{
+    return m_settings->value("options/transformMode", 0).toInt();
+}
+
+void AppConfig::setOptionTransformMode(int mode)
+{
+    m_settings->setValue("options/transformMode", mode);
+}
+
+QString AppConfig::optionLanguage() const
+{
+    return m_settings->value("options/language", "zh").toString();
+}
+
+void AppConfig::setOptionLanguage(const QString &lang)
+{
+    m_settings->setValue("options/language", lang);
+}
