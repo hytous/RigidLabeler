@@ -88,6 +88,7 @@ private slots:
     void exportTiePoints();
     void importTiePoints();
     void exportMatrix();
+    void quickExportTiePoints();  // Ctrl+S: auto export tie points
     void onOriginModeToggled(bool topLeftOrigin);
     
     // Image view interactions
@@ -224,6 +225,9 @@ private:
     // Matrix export
     QString m_matrixExportDir;
     
+    // Tie points auto export
+    QString m_tiePointsExportDir;
+    
     // Mouse interaction state
     bool m_isPanning;
     bool m_isSelecting;
@@ -231,6 +235,9 @@ private:
     QRubberBand *m_fixedRubberBand;
     QRubberBand *m_movingRubberBand;
     QPoint m_rubberBandOrigin;
+    
+    // Selected point indices (for multi-selection)
+    QSet<int> m_selectedPointIndices;
     
     // Undo/Redo
     QUndoStack *m_undoStack;

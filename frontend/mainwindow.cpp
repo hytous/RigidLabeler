@@ -140,10 +140,11 @@ MainWindow::MainWindow(QWidget *parent)
     // Setup UI components
     setupImageViews();
     installEventFilters();
-    setupConnections();
     
-    // Setup tie point table model
+    // Setup tie point table model (MUST be before setupConnections for selectionModel to exist)
     ui->tiePointsTable->setModel(m_tiePointModel);
+    
+    setupConnections();
     
     // Setup status bar labels
     m_backendStatusLabel = new QLabel(tr("Backend: Checking..."));
@@ -346,12 +347,15 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event)
                 }
                 return true;
             }
-            // Normal click: select point
+            // Normal click: select point or clear selection
             else {
                 QPointF scenePos = view->mapToScene(mouseEvent->pos());
                 int pointIndex = findPointAtPosition(view, scenePos);
                 if (pointIndex >= 0) {
                     ui->tiePointsTable->selectRow(pointIndex);
+                } else {
+                    // Click on empty area: clear selection
+                    ui->tiePointsTable->clearSelection();
                 }
                 return true;
             }
@@ -458,6 +462,18 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
             event->accept();
             return;
         }
+    }
+    // Ctrl+S: Quick export tie points
+    if (event->modifiers() == Qt::ControlModifier && event->key() == Qt::Key_S) {
+        quickExportTiePoints();
+        event->accept();
+        return;
+    }
+    // Delete key: Delete selected points
+    if (event->key() == Qt::Key_Delete) {
+        deleteSelectedTiePoint();
+        event->accept();
+        return;
     }
     QMainWindow::keyPressEvent(event);
 }
@@ -1165,6 +1181,7 @@ QGraphicsItemGroup* MainWindow::createCrosshairMarker(QGraphicsScene *scene, con
     const double armLength = highlighted ? 14.0 : 10.0;  // Larger when highlighted
     const double penWidth = highlighted ? 3.0 : 2.0;     // Thicker when highlighted
     const double gapRadius = 3.0;  // Gap in center
+    const double outlineWidth = penWidth + 2.0;  // Outline is slightly thicker
     
     QGraphicsItemGroup *group = new QGraphicsItemGroup();
     
@@ -1172,30 +1189,80 @@ QGraphicsItemGroup* MainWindow::createCrosshairMarker(QGraphicsScene *scene, con
     // This keeps the marker at a fixed screen size
     group->setFlag(QGraphicsItem::ItemIgnoresTransformations, true);
     
-    QPen pen(color, penWidth);
+    // Create contrasting outline color (inverted/complementary)
+    QColor outlineColor = QColor(255 - color.red(), 255 - color.green(), 255 - color.blue());
+    // Make outline darker or lighter depending on the color brightness
+    int brightness = (color.red() + color.green() + color.blue()) / 3;
+    if (brightness > 128) {
+        outlineColor = Qt::black;
+    } else {
+        outlineColor = Qt::white;
+    }
     
-    // Draw lines relative to (0,0) since group will be positioned at 'pos'
+    QPen outlinePen(outlineColor, outlineWidth);
+    outlinePen.setCapStyle(Qt::RoundCap);
+    QPen mainPen(color, penWidth);
+    mainPen.setCapStyle(Qt::RoundCap);
+    
+    // If highlighted, draw a selection circle first (behind everything)
+    if (highlighted) {
+        const double circleRadius = 18.0;  // Selection circle radius
+        QGraphicsEllipseItem *selectionCircle = new QGraphicsEllipseItem(
+            -circleRadius, -circleRadius, circleRadius * 2, circleRadius * 2);
+        QPen circlePen(outlineColor, 2.0, Qt::DashLine);
+        selectionCircle->setPen(circlePen);
+        selectionCircle->setBrush(Qt::NoBrush);
+        group->addToGroup(selectionCircle);
+    }
+    
+    // Draw outline first (behind the main lines)
+    // Horizontal line (left part) - outline
+    QGraphicsLineItem *hLineLeftOut = new QGraphicsLineItem(-armLength, 0, -gapRadius, 0);
+    hLineLeftOut->setPen(outlinePen);
+    group->addToGroup(hLineLeftOut);
+    
+    // Horizontal line (right part) - outline
+    QGraphicsLineItem *hLineRightOut = new QGraphicsLineItem(gapRadius, 0, armLength, 0);
+    hLineRightOut->setPen(outlinePen);
+    group->addToGroup(hLineRightOut);
+    
+    // Vertical line (top part) - outline
+    QGraphicsLineItem *vLineTopOut = new QGraphicsLineItem(0, -armLength, 0, -gapRadius);
+    vLineTopOut->setPen(outlinePen);
+    group->addToGroup(vLineTopOut);
+    
+    // Vertical line (bottom part) - outline
+    QGraphicsLineItem *vLineBottomOut = new QGraphicsLineItem(0, gapRadius, 0, armLength);
+    vLineBottomOut->setPen(outlinePen);
+    group->addToGroup(vLineBottomOut);
+    
+    // Draw main colored lines on top
     // Horizontal line (left part)
     QGraphicsLineItem *hLineLeft = new QGraphicsLineItem(-armLength, 0, -gapRadius, 0);
-    hLineLeft->setPen(pen);
+    hLineLeft->setPen(mainPen);
     group->addToGroup(hLineLeft);
     
     // Horizontal line (right part)
     QGraphicsLineItem *hLineRight = new QGraphicsLineItem(gapRadius, 0, armLength, 0);
-    hLineRight->setPen(pen);
+    hLineRight->setPen(mainPen);
     group->addToGroup(hLineRight);
     
     // Vertical line (top part)
     QGraphicsLineItem *vLineTop = new QGraphicsLineItem(0, -armLength, 0, -gapRadius);
-    vLineTop->setPen(pen);
+    vLineTop->setPen(mainPen);
     group->addToGroup(vLineTop);
     
     // Vertical line (bottom part)
     QGraphicsLineItem *vLineBottom = new QGraphicsLineItem(0, gapRadius, 0, armLength);
-    vLineBottom->setPen(pen);
+    vLineBottom->setPen(mainPen);
     group->addToGroup(vLineBottom);
     
-    // Add a small center dot
+    // Add a small center dot with outline
+    QGraphicsEllipseItem *centerDotOutline = new QGraphicsEllipseItem(-3, -3, 6, 6);
+    centerDotOutline->setPen(Qt::NoPen);
+    centerDotOutline->setBrush(outlineColor);
+    group->addToGroup(centerDotOutline);
+    
     QGraphicsEllipseItem *centerDot = new QGraphicsEllipseItem(-2, -2, 4, 4);
     centerDot->setPen(Qt::NoPen);
     centerDot->setBrush(color);
@@ -1826,6 +1893,96 @@ void MainWindow::exportMatrix()
 // ============================================================================
 // Tie Point Import/Export
 // ============================================================================
+
+void MainWindow::quickExportTiePoints()
+{
+    if (m_tiePointModel->completePairCount() == 0) {
+        statusBar()->showMessage(tr("No complete tie points to export."), 2000);
+        return;
+    }
+    
+    // First time: ask user to select a folder
+    if (m_tiePointsExportDir.isEmpty()) {
+        QString dir = QFileDialog::getExistingDirectory(
+            this,
+            tr("Select Tie Points Export Folder"),
+            QString(),
+            QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks
+        );
+        
+        if (dir.isEmpty())
+            return;
+        
+        m_tiePointsExportDir = dir;
+    }
+    
+    // Get filename from fixed image name
+    QString fixedPath = m_imagePairModel->fixedImagePath();
+    QString baseName;
+    if (!fixedPath.isEmpty()) {
+        QFileInfo fi(fixedPath);
+        baseName = fi.baseName();
+    } else {
+        baseName = "tie_points";
+    }
+    
+    QString filePath = m_tiePointsExportDir + "/" + baseName + ".csv";
+    
+    QFile file(filePath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        showError(tr("Error"), tr("Failed to create file: %1").arg(filePath));
+        return;
+    }
+    
+    QTextStream out(&file);
+    
+    // Get image dimensions for center origin conversion
+    double fixedCenterX = 0, fixedCenterY = 0;
+    double movingCenterX = 0, movingCenterY = 0;
+    
+    if (m_fixedPixmapItem) {
+        QPixmap pm = m_fixedPixmapItem->pixmap();
+        fixedCenterX = pm.width() / 2.0;
+        fixedCenterY = pm.height() / 2.0;
+    }
+    if (m_movingPixmapItem) {
+        QPixmap pm = m_movingPixmapItem->pixmap();
+        movingCenterX = pm.width() / 2.0;
+        movingCenterY = pm.height() / 2.0;
+    }
+    
+    // Write header with origin mode info
+    out << "# Tie Points Export\n";
+    out << "# Origin Mode: " << (m_useTopLeftOrigin ? "TopLeft" : "Center") << "\n";
+    if (!m_useTopLeftOrigin) {
+        out << "# Fixed Image Center: " << fixedCenterX << ", " << fixedCenterY << "\n";
+        out << "# Moving Image Center: " << movingCenterX << ", " << movingCenterY << "\n";
+    }
+    out << "# Format: index, fixed_x, fixed_y, moving_x, moving_y\n";
+    
+    QList<TiePointPair> pairs = m_tiePointModel->getCompletePairs();
+    int index = 1;
+    for (const TiePointPair &pair : pairs) {
+        double fx = pair.fixed->x();
+        double fy = pair.fixed->y();
+        double mx = pair.moving->x();
+        double my = pair.moving->y();
+        
+        // Convert to center origin if needed
+        if (!m_useTopLeftOrigin) {
+            fx -= fixedCenterX;
+            fy -= fixedCenterY;
+            mx -= movingCenterX;
+            my -= movingCenterY;
+        }
+        
+        out << index << "," << fx << "," << fy << "," << mx << "," << my << "\n";
+        index++;
+    }
+    
+    file.close();
+    showSuccessToast(tr("Saved successfully"));
+}
 
 void MainWindow::exportTiePoints()
 {

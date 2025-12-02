@@ -116,6 +116,10 @@
         <translation>选择矩阵导出文件夹</translation>
     </message>
     <message>
+        <source>Select Tie Points Export Folder</source>
+        <translation>选择点对导出文件夹</translation>
+    </message>
+    <message>
         <source>Saved successfully</source>
         <translation>保存成功</translation>
     </message>
