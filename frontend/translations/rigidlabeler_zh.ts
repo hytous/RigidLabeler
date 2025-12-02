@@ -509,12 +509,12 @@ ID: %1
         <translation>实时计算模式</translation>
     </message>
     <message>
-        <source>Automatically compute transform 10s after adding a complete point pair (requires 3+ pairs)</source>
-        <translation>添加完整点对后10秒自动计算变换（需要3个以上点对）</translation>
+        <source>Automatically compute transform 5s after adding a complete point pair (requires 3+ pairs)</source>
+        <translation>添加完整点对后5秒自动计算变换（需要3个以上点对）</translation>
     </message>
     <message>
-        <source>Real-time compute mode enabled. Transform will auto-compute 10s after adding a pair.</source>
-        <translation>实时计算模式已启用。添加点对后10秒将自动计算变换。</translation>
+        <source>Real-time compute mode enabled. Transform will auto-compute 5s after adding a pair.</source>
+        <translation>实时计算模式已启用。添加点对后5秒将自动计算变换。</translation>
     </message>
     <message>
         <source>Real-time compute mode disabled.</source>
@@ -525,12 +525,25 @@ ID: %1
         <translation>正在自动计算变换...</translation>
     </message>
     <message>
-        <source>Pair #%1 complete. Auto-compute in 10 seconds...</source>
-        <translation>点对 #%1 完成。10秒后自动计算...</translation>
+        <source>Pair #%1 complete. Auto-compute in 5 seconds...</source>
+        <translation>点对 #%1 完成。5秒后自动计算...</translation>
     </message>
     <message>
         <source>Real-time compute mode auto-disabled (less than 3 complete pairs).</source>
         <translation>实时计算模式已自动禁用（完整点对少于3个）。</translation>
+    </message>
+    <message>
+        <source>Real-time compute mode auto-enabled (3+ complete pairs).</source>
+        <translation>实时计算模式已自动启用（3个以上完整点对）。</translation>
+    </message>
+    <!-- Show Point Labels -->
+    <message>
+        <source>Show Point Labels</source>
+        <translation>显示点标签</translation>
+    </message>
+    <message>
+        <source>Display point index numbers next to each crosshair marker</source>
+        <translation>在每个十字标记旁显示点序号</translation>
     </message>
     <!-- Import/Export tie points -->
     <message>

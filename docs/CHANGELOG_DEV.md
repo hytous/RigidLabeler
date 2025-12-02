@@ -4,6 +4,122 @@
 
 ---
 
+## #018 - 2025-12-02
+
+### 需求
+在结果显示区域（txtResult）中，根据 RMS Error 数值添加颜色渐变，直观显示配准质量。
+
+### 实现
+在 `onComputeRigidCompleted()` 函数中，根据 RMS Error 值选择颜色：
+- `< 1.0 px`：绿色 (#00aa00) - 优秀
+- `1.0 ~ 3.0 px`：青色 (#00aaaa) - 良好
+- `3.0 ~ 4.0 px`：橙色 (#ff8800) - 警告
+- `>= 4.0 px`：红色 (#ff0000) - 较差
+
+### 技术细节
+- 将 `txtResult` 的内容从纯文本改为 HTML 格式
+- 使用 `<span style='color:...'>` 标签为 RMS Error 行添加颜色
+- 使用 `<pre>` 标签保持等宽字体排版
+- 将换行符 `\n` 替换为 `<br>` 以适应 HTML
+
+### 代码
+```cpp
+QString rmsColor;
+if (result.rmsError < 1.0) {
+    rmsColor = "#00aa00";  // Green - excellent
+} else if (result.rmsError < 3.0) {
+    rmsColor = "#00aaaa";  // Cyan - good
+} else if (result.rmsError < 4.0) {
+    rmsColor = "#ff8800";  // Orange - warning
+} else {
+    rmsColor = "#ff0000";  // Red - poor
+}
+resultText += QString("<span style='color:%1; font-weight:bold;'>%2</span>\n")
+    .arg(rmsColor)
+    .arg(tr("RMS Error: %1 px").arg(result.rmsError, 0, 'f', 4));
+```
+
+---
+
+## #017 - 2025-12-02
+
+### 需求
+表格选中样式改为类似 Excel 的蓝色高亮。
+
+### 实现
+在 `MainWindow` 构造函数中为 `tiePointsTable` 设置 Qt 样式表：
+```cpp
+ui->tiePointsTable->setStyleSheet(
+    "QTableView::item:selected { background-color: #0078d7; color: white; }"
+    "QTableView::item:selected:focus { background-color: #0078d7; color: white; }"
+);
+```
+
+---
+
+## #016 - 2025-12-02
+
+### 需求
+当点对数量达到最小要求时，自动开启实时计算模式。
+
+### 实现
+在 `updateRealtimeComputeState()` 函数中，当 `completePairCount >= 3` 且两张图像都已加载时，自动勾选 `chkRealtimeCompute` 并启用实时计算模式。
+
+### 代码
+```cpp
+// Auto-enable realtime mode when we first reach 3 points (and images are loaded)
+if (canEnable && !m_realtimeComputeEnabled && m_imagePairModel->hasBothImages()) {
+    ui->chkRealtimeCompute->setChecked(true);
+    m_realtimeComputeEnabled = true;
+    statusBar()->showMessage(tr("Real-time compute mode auto-enabled (3+ complete pairs)."), 3000);
+}
+```
+
+---
+
+## #015 - 2025-12-02
+
+### 需求
+在十字标记旁边显示点序号（可选功能）。
+
+### 实现
+1. 添加成员变量 `m_showPointLabels`，默认为 `true`
+2. 在 UI 中添加 "Show Point Labels" 复选框
+3. 修改 `createCrosshairMarker()` 函数签名，增加 `pointIndex` 参数
+4. 当 `m_showPointLabels` 为 true 且 `pointIndex >= 0` 时，绘制文字标签
+5. 标签使用主色绘制，带反色背景阴影增强可读性
+6. 更新 `updatePointDisplay()` 中的调用，传入点索引
+
+### 技术细节
+- 使用 `QGraphicsSimpleTextItem` 绘制文字
+- 字号 9pt，加粗
+- 位置在十字标记右上角（armLength + 3, -armLength）
+- 通过绘制两层文字（阴影层在下）实现边缘效果
+
+---
+
+## #014 - 2025-12-02
+
+### 需求
+1. 实时计算延迟从 10 秒改为 5 秒
+2. 计算完成后自动刷新预览对话框（如果已打开）
+
+### 实现
+
+#### 缩短延迟
+将 `m_realtimeComputeTimer->setInterval(10000)` 改为 `setInterval(5000)`，并更新相关状态栏提示信息。
+
+#### 自动刷新预览
+在 `onComputeRigidCompleted()` 末尾添加：
+```cpp
+// Auto-refresh preview dialog if it's open
+if (m_previewDialog && m_previewDialog->isVisible()) {
+    onPreviewRefreshRequested(m_currentPreviewGridSize);
+}
+```
+
+---
+
 ## #013 - 2025-12-02
 
 ### 问题

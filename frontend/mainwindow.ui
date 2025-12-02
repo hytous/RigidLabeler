@@ -363,12 +363,25 @@
             </widget>
            </item>
            <item>
+            <widget class="QCheckBox" name="chkShowPointLabels">
+             <property name="text">
+              <string>Show Point Labels</string>
+             </property>
+             <property name="toolTip">
+              <string>Display point index numbers next to each crosshair marker</string>
+             </property>
+             <property name="checked">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
             <widget class="QCheckBox" name="chkRealtimeCompute">
              <property name="text">
               <string>Real-time Compute Mode</string>
              </property>
              <property name="toolTip">
-              <string>Automatically compute transform 10s after adding a complete point pair (requires 3+ pairs)</string>
+              <string>Automatically compute transform 5s after adding a complete point pair (requires 3+ pairs)</string>
              </property>
              <property name="enabled">
               <bool>false</bool>

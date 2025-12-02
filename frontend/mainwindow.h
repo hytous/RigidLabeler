@@ -156,7 +156,8 @@ private:
     
     // Crosshair marker helpers
     QGraphicsItemGroup* createCrosshairMarker(QGraphicsScene *scene, const QPointF &pos, 
-                                               const QColor &color, bool highlighted = false);
+                                               const QColor &color, bool highlighted = false,
+                                               int pointIndex = -1);
     void updatePendingPointMarker();
     void clearPendingPointMarker();
     void updateCursorMarker(QGraphicsScene *scene, const QPointF &pos);
@@ -257,6 +258,9 @@ private:
     // Preview dialog
     PreviewDialog *m_previewDialog;
     int m_currentPreviewGridSize;
+    
+    // Point label display mode
+    bool m_showPointLabels;
 };
 
 #endif // MAINWINDOW_H

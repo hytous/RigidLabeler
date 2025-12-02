@@ -96,6 +96,7 @@ MainWindow::MainWindow(QWidget *parent)
     , m_useTopLeftOrigin(false)  // Default: use image center as origin
     , m_previewDialog(nullptr)
     , m_currentPreviewGridSize(8)
+    , m_showPointLabels(true)  // Default: show point labels
 {
     ui->setupUi(this);
     
@@ -113,9 +114,9 @@ MainWindow::MainWindow(QWidget *parent)
            "Parameters: θ (rotation), tx, ty (translation), scale_x, scale_y, shear\n"
            "Minimum points: 3"), Qt::ToolTipRole);
     
-    // Initialize real-time compute timer (10 seconds)
+    // Initialize real-time compute timer (5 seconds)
     m_realtimeComputeTimer->setSingleShot(true);
-    m_realtimeComputeTimer->setInterval(10000);  // 10 seconds
+    m_realtimeComputeTimer->setInterval(5000);  // 5 seconds
     
     // Initialize color palette for point pairs (distinct, easily visible colors)
     m_pointColors << QColor(255, 0, 0)      // Red
@@ -143,6 +144,12 @@ MainWindow::MainWindow(QWidget *parent)
     
     // Setup tie point table model (MUST be before setupConnections for selectionModel to exist)
     ui->tiePointsTable->setModel(m_tiePointModel);
+    
+    // Apply Excel-style selection highlighting to the table
+    ui->tiePointsTable->setStyleSheet(
+        "QTableView::item:selected { background-color: #0078d7; color: white; }"
+        "QTableView::item:selected:focus { background-color: #0078d7; color: white; }"
+    );
     
     setupConnections();
     
@@ -240,6 +247,10 @@ void MainWindow::setupConnections()
     // Options
     connect(ui->chkOriginTopLeft, &QCheckBox::toggled, this, &MainWindow::onOriginModeToggled);
     connect(ui->chkRealtimeCompute, &QCheckBox::toggled, this, &MainWindow::onRealtimeComputeToggled);
+    connect(ui->chkShowPointLabels, &QCheckBox::toggled, this, [this](bool checked) {
+        m_showPointLabels = checked;
+        updatePointDisplay();
+    });
     connect(ui->cmbTransformMode, QOverload<int>::of(&QComboBox::currentIndexChanged), 
             this, &MainWindow::updateActionStates);
     
@@ -945,7 +956,22 @@ void MainWindow::onComputeRigidCompleted(const ComputeRigidResult &result)
     if (qAbs(result.rigid.shear) > 1e-6) {
         resultText += tr("Shear: %1\n").arg(result.rigid.shear, 0, 'f', 6);
     }
-    resultText += tr("RMS Error: %1 px\n").arg(result.rmsError, 0, 'f', 4);
+    
+    // RMS Error with color gradient based on value
+    QString rmsColor;
+    if (result.rmsError < 1.0) {
+        rmsColor = "#00aa00";  // Green - excellent
+    } else if (result.rmsError < 3.0) {
+        rmsColor = "#00aaaa";  // Cyan - good
+    } else if (result.rmsError < 4.0) {
+        rmsColor = "#ff8800";  // Orange - warning
+    } else {
+        rmsColor = "#ff0000";  // Red - poor
+    }
+    resultText += QString("<span style='color:%1; font-weight:bold;'>%2</span>\n")
+        .arg(rmsColor)
+        .arg(tr("RMS Error: %1 px").arg(result.rmsError, 0, 'f', 4));
+    
     resultText += tr("Points Used: %1\n\n").arg(result.numPoints);
     resultText += tr("Matrix:\n");
     for (int i = 0; i < 3; ++i) {
@@ -955,9 +981,16 @@ void MainWindow::onComputeRigidCompleted(const ComputeRigidResult &result)
             .arg(result.matrix3x3[i][2], 10, 'f', 6);
     }
     
-    ui->txtResult->setText(resultText);
+    // Convert newlines to <br> for HTML and set as HTML
+    resultText.replace("\n", "<br>");
+    ui->txtResult->setHtml(QString("<pre style='font-family: monospace;'>%1</pre>").arg(resultText));
     statusBar()->showMessage(tr("Transform computed successfully."), 3000);
     updateActionStates();
+    
+    // Auto-refresh preview dialog if it's open
+    if (m_previewDialog && m_previewDialog->isVisible()) {
+        onPreviewRefreshRequested(m_currentPreviewGridSize);
+    }
 }
 
 void MainWindow::onSaveLabelCompleted(const LabelSaveResult &result)
@@ -1152,13 +1185,13 @@ void MainWindow::updatePointDisplay()
         
         // Only draw fixed marker if fixed point exists
         if (pair.hasFixed()) {
-            QGraphicsItemGroup *fixedMarker = createCrosshairMarker(m_fixedScene, pair.fixed.value(), color, isSelected);
+            QGraphicsItemGroup *fixedMarker = createCrosshairMarker(m_fixedScene, pair.fixed.value(), color, isSelected, i);
             m_fixedPointMarkers.append(fixedMarker);
         }
         
         // Only draw moving marker if moving point exists
         if (pair.hasMoving()) {
-            QGraphicsItemGroup *movingMarker = createCrosshairMarker(m_movingScene, pair.moving.value(), color, isSelected);
+            QGraphicsItemGroup *movingMarker = createCrosshairMarker(m_movingScene, pair.moving.value(), color, isSelected, i);
             m_movingPointMarkers.append(movingMarker);
         }
     }
@@ -1176,7 +1209,8 @@ void MainWindow::updatePointDisplay()
 }
 
 QGraphicsItemGroup* MainWindow::createCrosshairMarker(QGraphicsScene *scene, const QPointF &pos, 
-                                                       const QColor &color, bool highlighted)
+                                                       const QColor &color, bool highlighted,
+                                                       int pointIndex)
 {
     const double armLength = highlighted ? 14.0 : 10.0;  // Larger when highlighted
     const double penWidth = highlighted ? 3.0 : 2.0;     // Thicker when highlighted
@@ -1267,6 +1301,27 @@ QGraphicsItemGroup* MainWindow::createCrosshairMarker(QGraphicsScene *scene, con
     centerDot->setPen(Qt::NoPen);
     centerDot->setBrush(color);
     group->addToGroup(centerDot);
+    
+    // Add point index label if enabled and pointIndex is valid
+    if (m_showPointLabels && pointIndex >= 0) {
+        QGraphicsSimpleTextItem *label = new QGraphicsSimpleTextItem(QString::number(pointIndex + 1));
+        QFont font = label->font();
+        font.setPointSize(9);
+        font.setBold(true);
+        label->setFont(font);
+        label->setBrush(color);
+        // Position label to the right of the crosshair
+        label->setPos(armLength + 3, -armLength);
+        group->addToGroup(label);
+        
+        // Add text outline for better visibility
+        QGraphicsSimpleTextItem *labelOutline = new QGraphicsSimpleTextItem(QString::number(pointIndex + 1));
+        labelOutline->setFont(font);
+        labelOutline->setBrush(outlineColor);
+        labelOutline->setPos(armLength + 2, -armLength - 1);
+        labelOutline->setZValue(-1);  // Behind the main label
+        group->addToGroup(labelOutline);
+    }
     
     // Position the group at the scene coordinates
     group->setPos(pos);
@@ -1808,10 +1863,10 @@ void MainWindow::onPairCompleted(int pairIndex)
     if (m_realtimeComputeEnabled) {
         int pointCount = m_tiePointModel->completePairCount();
         if (pointCount >= 3) {
-            // Restart the timer (resets the 10s countdown)
+            // Restart the timer (resets the 5s countdown)
             m_realtimeComputeTimer->start();
             m_realtimeComputePending = true;
-            statusBar()->showMessage(tr("Pair #%1 complete. Auto-compute in 10 seconds...").arg(pairIndex + 1), 3000);
+            statusBar()->showMessage(tr("Pair #%1 complete. Auto-compute in 5 seconds...").arg(pairIndex + 1), 3000);
         }
     }
 }
@@ -1831,6 +1886,13 @@ void MainWindow::updateRealtimeComputeState()
         m_realtimeComputeTimer->stop();
         m_realtimeComputePending = false;
         statusBar()->showMessage(tr("Real-time compute mode auto-disabled (less than 3 complete pairs)."), 3000);
+    }
+    
+    // Auto-enable realtime mode when we first reach 3 points (and images are loaded)
+    if (canEnable && !m_realtimeComputeEnabled && m_imagePairModel->hasBothImages()) {
+        ui->chkRealtimeCompute->setChecked(true);
+        m_realtimeComputeEnabled = true;
+        statusBar()->showMessage(tr("Real-time compute mode auto-enabled (3+ complete pairs)."), 3000);
     }
 }
 
