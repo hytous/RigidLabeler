@@ -4,6 +4,26 @@
 
 ---
 
+## #013 - 2025-12-02
+
+### 问题
+
+按 Ctrl+S 有几率出现 "Please compute transform first" 的弹窗。
+
+### 原因
+
+快捷键冲突：
+1. `mainwindow.ui` 中 `actionSaveLabel` 绑定了 `Ctrl+S`，触发 `saveLabel()` 函数（需要先计算变换）
+2. `keyPressEvent()` 中也处理了 `Ctrl+S`，调用 `quickExportTiePoints()`
+
+Qt 的事件处理顺序不确定，有时 QAction 的快捷键先触发，有时 keyPressEvent 先触发。
+
+### 修复
+
+移除 `mainwindow.ui` 中 `actionSaveLabel` 的 `Ctrl+S` 快捷键，让 `Ctrl+S` 专门用于快速导出点对。
+
+---
+
 ## #012 - 2025-12-02
 
 ### 问题

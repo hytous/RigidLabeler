@@ -618,9 +618,6 @@
    <property name="text">
     <string>&amp;Save Label...</string>
    </property>
-   <property name="shortcut">
-    <string>Ctrl+S</string>
-   </property>
   </action>
   <action name="actionLoadLabel">
    <property name="text">
