@@ -35,7 +35,48 @@
 // Undo Command Classes
 // ============================================================================
 
-// Undo command for removing a tie point (still needed for delete button)
+// Undo command for adding a single point (fixed or moving)
+class AddPointCommand : public QUndoCommand
+{
+public:
+    AddPointCommand(TiePointModel *model, const QPointF &pos, bool isFixed, QUndoCommand *parent = nullptr)
+        : QUndoCommand(parent), m_model(model), m_position(pos), m_isFixed(isFixed), m_pairIndex(-1)
+    {
+        setText(isFixed ? QObject::tr("Add Fixed Point") : QObject::tr("Add Moving Point"));
+    }
+    
+    void redo() override {
+        // Add the point and store the pairIndex for undo
+        if (m_isFixed) {
+            if (m_pairIndex < 0) {
+                m_pairIndex = m_model->addFixedPointDirect(m_position);
+            } else {
+                m_model->addFixedPointDirect(m_pairIndex, m_position);
+            }
+        } else {
+            if (m_pairIndex < 0) {
+                m_pairIndex = m_model->addMovingPointDirect(m_position);
+            } else {
+                m_model->addMovingPointDirect(m_pairIndex, m_position);
+            }
+        }
+    }
+    
+    void undo() override {
+        // Remove the point
+        m_model->removePointDirect(m_pairIndex, m_isFixed);
+    }
+    
+    int pairIndex() const { return m_pairIndex; }
+    
+private:
+    TiePointModel *m_model;
+    QPointF m_position;
+    bool m_isFixed;
+    int m_pairIndex;
+};
+
+// Undo command for removing a complete tie point pair (for delete button)
 class RemoveTiePointCommand : public QUndoCommand
 {
 public:
@@ -47,6 +88,8 @@ public:
         TiePoint tp = m_model->getTiePoint(index);
         m_fixed = tp.fixed;
         m_moving = tp.moving;
+        // Store the pairIndex for proper restoration
+        m_pairIndex = m_model->getPairIndexAt(index);
     }
     
     void redo() override {
@@ -54,12 +97,14 @@ public:
     }
     
     void undo() override {
-        m_model->insertTiePoint(m_index, m_fixed, m_moving);
+        // Restore with the original pairIndex
+        m_model->insertTiePoint(m_index, m_fixed, m_moving, m_pairIndex);
     }
     
 private:
     TiePointModel *m_model;
     int m_index;
+    int m_pairIndex;
     QPointF m_fixed;
     QPointF m_moving;
 };
@@ -179,6 +224,8 @@ MainWindow::MainWindow(QWidget *parent)
         }
         if (m_translator->load(translationPath) || m_translator->load("rigidlabeler_zh", ":/translations")) {
             qApp->installTranslator(m_translator);
+            // Re-translate the UI after installing translator
+            ui->retranslateUi(this);
         }
     }
     
@@ -556,6 +603,14 @@ void MainWindow::loadFixedImage()
     if (fileName.isEmpty())
         return;
     
+    // Save current tie points before switching
+    saveProjectState();
+    
+    // Clear current tie points and transform
+    m_tiePointModel->clearAll();
+    m_hasValidTransform = false;
+    ui->txtResult->clear();
+    
     if (m_imagePairModel->loadFixedImage(fileName)) {
         QFileInfo fi(fileName);
         AppConfig::instance().setLastFixedImageDir(fi.absolutePath());
@@ -587,6 +642,14 @@ void MainWindow::loadMovingImage()
     
     if (fileName.isEmpty())
         return;
+    
+    // Save current tie points before switching
+    saveProjectState();
+    
+    // Clear current tie points and transform
+    m_tiePointModel->clearAll();
+    m_hasValidTransform = false;
+    ui->txtResult->clear();
     
     if (m_imagePairModel->loadMovingImage(fileName)) {
         QFileInfo fi(fileName);
@@ -915,8 +978,10 @@ void MainWindow::onFixedViewClicked(const QPointF &pos)
     // Clear cursor marker first (it was following the mouse)
     clearCursorMarker();
     
-    // Add fixed point to model (model handles internal undo stack)
-    int index = m_tiePointModel->addFixedPoint(pos);
+    // Create and execute AddPointCommand via QUndoStack
+    AddPointCommand *cmd = new AddPointCommand(m_tiePointModel, pos, true);
+    m_undoStack->push(cmd);  // This calls cmd->redo() automatically
+    int index = cmd->pairIndex();
     
     // Display coordinates in current coordinate system
     ui->lblFixedCoord->setText(formatDisplayCoord(pos, true));
@@ -942,8 +1007,10 @@ void MainWindow::onMovingViewClicked(const QPointF &pos)
     // Clear cursor marker first
     clearCursorMarker();
     
-    // Add moving point to model (model handles internal undo stack)
-    int index = m_tiePointModel->addMovingPoint(pos);
+    // Create and execute AddPointCommand via QUndoStack
+    AddPointCommand *cmd = new AddPointCommand(m_tiePointModel, pos, false);
+    m_undoStack->push(cmd);  // This calls cmd->redo() automatically
+    int index = cmd->pairIndex();
     
     // Display coordinates in current coordinate system
     ui->lblMovingCoord->setText(formatDisplayCoord(pos, false));
@@ -1450,9 +1517,9 @@ void MainWindow::updateActionStates()
     ui->actionSaveLabel->setEnabled(hasBothImages && m_hasValidTransform);
     ui->actionLoadLabel->setEnabled(hasBothImages);
     
-    // Undo is enabled if either model or QUndoStack can undo
-    ui->actionUndo->setEnabled(m_tiePointModel->canUndo() || m_undoStack->canUndo());
-    ui->actionRedo->setEnabled(m_tiePointModel->canRedo() || m_undoStack->canRedo());
+    // Undo/Redo - now unified via QUndoStack
+    ui->actionUndo->setEnabled(m_undoStack->canUndo());
+    ui->actionRedo->setEnabled(m_undoStack->canRedo());
     
     // Update buttons
     ui->btnCompute->setEnabled(hasBothImages && pointCount >= minPoints);
@@ -1628,6 +1695,14 @@ void MainWindow::prevFixedImage()
     if (m_fixedImageIndex <= 0)
         return;
     
+    // Save current tie points before switching
+    saveProjectState();
+    
+    // Clear current tie points and transform
+    m_tiePointModel->clearAll();
+    m_hasValidTransform = false;
+    ui->txtResult->clear();
+    
     loadFixedImageByIndex(m_fixedImageIndex - 1);
 }
 
@@ -1635,6 +1710,14 @@ void MainWindow::nextFixedImage()
 {
     if (m_fixedImageIndex < 0 || m_fixedImageIndex >= m_fixedImageFiles.size() - 1)
         return;
+    
+    // Save current tie points before switching
+    saveProjectState();
+    
+    // Clear current tie points and transform
+    m_tiePointModel->clearAll();
+    m_hasValidTransform = false;
+    ui->txtResult->clear();
     
     loadFixedImageByIndex(m_fixedImageIndex + 1);
 }
@@ -1644,6 +1727,14 @@ void MainWindow::prevMovingImage()
     if (m_movingImageIndex <= 0)
         return;
     
+    // Save current tie points before switching
+    saveProjectState();
+    
+    // Clear current tie points and transform
+    m_tiePointModel->clearAll();
+    m_hasValidTransform = false;
+    ui->txtResult->clear();
+    
     loadMovingImageByIndex(m_movingImageIndex - 1);
 }
 
@@ -1652,29 +1743,64 @@ void MainWindow::nextMovingImage()
     if (m_movingImageIndex < 0 || m_movingImageIndex >= m_movingImageFiles.size() - 1)
         return;
     
+    // Save current tie points before switching
+    saveProjectState();
+    
+    // Clear current tie points and transform
+    m_tiePointModel->clearAll();
+    m_hasValidTransform = false;
+    ui->txtResult->clear();
+    
     loadMovingImageByIndex(m_movingImageIndex + 1);
 }
 
 void MainWindow::prevPair()
 {
+    // Check if we can go back for both images
+    if (m_fixedImageIndex <= 0 && m_movingImageIndex <= 0)
+        return;
+    
+    // Save current project state before switching
+    saveProjectState();
+    
     // Clear current tie points and transform
     m_tiePointModel->clearAll();
     m_hasValidTransform = false;
     ui->txtResult->clear();
     
-    prevFixedImage();
-    prevMovingImage();
+    // Load previous images directly without additional save/clear
+    if (m_fixedImageIndex > 0) {
+        loadFixedImageByIndex(m_fixedImageIndex - 1);
+    }
+    if (m_movingImageIndex > 0) {
+        loadMovingImageByIndex(m_movingImageIndex - 1);
+    }
 }
 
 void MainWindow::nextPair()
 {
+    // Check if we can go forward for both images
+    bool canNextFixed = m_fixedImageIndex >= 0 && m_fixedImageIndex < m_fixedImageFiles.size() - 1;
+    bool canNextMoving = m_movingImageIndex >= 0 && m_movingImageIndex < m_movingImageFiles.size() - 1;
+    
+    if (!canNextFixed && !canNextMoving)
+        return;
+    
+    // Save current project state before switching
+    saveProjectState();
+    
     // Clear current tie points and transform
     m_tiePointModel->clearAll();
     m_hasValidTransform = false;
     ui->txtResult->clear();
     
-    nextFixedImage();
-    nextMovingImage();
+    // Load next images directly without additional save/clear
+    if (canNextFixed) {
+        loadFixedImageByIndex(m_fixedImageIndex + 1);
+    }
+    if (canNextMoving) {
+        loadMovingImageByIndex(m_movingImageIndex + 1);
+    }
 }
 
 // ============================================================================
@@ -1739,46 +1865,28 @@ void MainWindow::handleRubberBandSelection(QGraphicsView *view, const QRect &rub
 }
 
 // ============================================================================
-// Undo/Redo
+// Undo/Redo (Unified via QUndoStack)
 // ============================================================================
 
 void MainWindow::undo()
 {
-    // Try model's internal undo first (for individual point undo)
-    if (m_tiePointModel->canUndo()) {
-        m_tiePointModel->undoLastPoint();
-        m_hasValidTransform = false;
-        updatePointDisplay();
-        updateActionStates();
-        statusBar()->showMessage(tr("Undo: Last point removed"), 2000);
-        return;
-    }
-    
-    // Fallback to QUndoStack for other operations (like remove)
     if (m_undoStack->canUndo()) {
         m_undoStack->undo();
         m_hasValidTransform = false;
+        updatePointDisplay();
         updateActionStates();
+        statusBar()->showMessage(tr("Undo: %1").arg(m_undoStack->undoText()), 2000);
     }
 }
 
 void MainWindow::redo()
 {
-    // Try model's internal redo first
-    if (m_tiePointModel->canRedo()) {
-        m_tiePointModel->redoLastPoint();
-        m_hasValidTransform = false;
-        updatePointDisplay();
-        updateActionStates();
-        statusBar()->showMessage(tr("Redo: Point restored"), 2000);
-        return;
-    }
-    
-    // Fallback to QUndoStack for other operations
     if (m_undoStack->canRedo()) {
         m_undoStack->redo();
         m_hasValidTransform = false;
+        updatePointDisplay();
         updateActionStates();
+        statusBar()->showMessage(tr("Redo: %1").arg(m_undoStack->redoText()), 2000);
     }
 }
 
@@ -2456,8 +2564,8 @@ void MainWindow::restoreLastProject()
                 m_tiePointModel->addTiePoint(QPointF(fx, fy), QPointF(mx, my));
                 restoredCount++;
             } else if (hasFx && hasFy) {
-                // Only fixed point
-                m_tiePointModel->addFixedPoint(QPointF(fx, fy));
+                // Only fixed point - use direct method for restoration
+                m_tiePointModel->addFixedPointDirect(QPointF(fx, fy));
                 restoredCount++;
             } else if (hasMx && hasMy) {
                 // Only moving point (shouldn't happen normally)

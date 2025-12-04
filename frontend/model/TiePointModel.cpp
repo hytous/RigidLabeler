@@ -184,10 +184,10 @@ bool TiePointModel::setData(const QModelIndex &index, const QVariant &value, int
 }
 
 // ============================================================================
-// New Point Management API
+// Direct Point Operations (for QUndoCommand - no internal undo tracking)
 // ============================================================================
 
-int TiePointModel::addFixedPoint(const QPointF &point)
+int TiePointModel::addFixedPointDirect(const QPointF &point)
 {
     // Find a pair that needs a fixed point (has moving but no fixed)
     int pairIndex = -1;
@@ -204,18 +204,13 @@ int TiePointModel::addFixedPoint(const QPointF &point)
         pairIndex = getNextPairIndex();
     }
     
+    return addFixedPointDirect(pairIndex, point);
+}
+
+int TiePointModel::addFixedPointDirect(int pairIndex, const QPointF &point)
+{
     // Add to fixed points
     m_fixedPoints.append(PointEntry(pairIndex, point));
-    
-    // Clear redo stack on new action
-    m_redoStack.clear();
-    
-    // Push to undo stack
-    UndoEntry entry;
-    entry.pairIndex = pairIndex;
-    entry.isFixed = true;
-    entry.position = point;
-    m_undoStack.push(entry);
     
     // Set active stack
     m_activeStack = ActiveStack::Fixed;
@@ -232,12 +227,11 @@ int TiePointModel::addFixedPoint(const QPointF &point)
     }
     
     emit pointAdded(pairIndex, true);
-    emit undoRedoStateChanged();
     
     return pairIndex;
 }
 
-int TiePointModel::addMovingPoint(const QPointF &point)
+int TiePointModel::addMovingPointDirect(const QPointF &point)
 {
     // Find the pair index that needs a moving point
     int pairIndex = -1;
@@ -255,18 +249,13 @@ int TiePointModel::addMovingPoint(const QPointF &point)
         pairIndex = getNextPairIndex();
     }
     
+    return addMovingPointDirect(pairIndex, point);
+}
+
+int TiePointModel::addMovingPointDirect(int pairIndex, const QPointF &point)
+{
     // Add to moving points
     m_movingPoints.append(PointEntry(pairIndex, point));
-    
-    // Clear redo stack on new action
-    m_redoStack.clear();
-    
-    // Push to undo stack
-    UndoEntry entry;
-    entry.pairIndex = pairIndex;
-    entry.isFixed = false;
-    entry.position = point;
-    m_undoStack.push(entry);
     
     // Set active stack
     m_activeStack = ActiveStack::Moving;
@@ -283,81 +272,35 @@ int TiePointModel::addMovingPoint(const QPointF &point)
     }
     
     emit pointAdded(pairIndex, false);
-    emit undoRedoStateChanged();
     
     return pairIndex;
 }
 
-bool TiePointModel::undoLastPoint()
+void TiePointModel::removePointDirect(int pairIndex, bool isFixed)
 {
-    if (m_undoStack.isEmpty())
-        return false;
-    
-    UndoEntry entry = m_undoStack.pop();
-    
-    // Remove the point from the appropriate list
-    if (entry.isFixed) {
+    if (isFixed) {
         for (int i = m_fixedPoints.size() - 1; i >= 0; --i) {
-            if (m_fixedPoints[i].pairIndex == entry.pairIndex) {
+            if (m_fixedPoints[i].pairIndex == pairIndex) {
                 m_fixedPoints.removeAt(i);
                 break;
             }
         }
     } else {
         for (int i = m_movingPoints.size() - 1; i >= 0; --i) {
-            if (m_movingPoints[i].pairIndex == entry.pairIndex) {
+            if (m_movingPoints[i].pairIndex == pairIndex) {
                 m_movingPoints.removeAt(i);
                 break;
             }
         }
     }
     
-    // Push to redo stack
-    m_redoStack.push(entry);
-    
-    // Update active stack based on what's left on undo stack
-    if (m_undoStack.isEmpty()) {
-        m_activeStack = ActiveStack::None;
-    } else {
-        m_activeStack = m_undoStack.top().isFixed ? ActiveStack::Fixed : ActiveStack::Moving;
-    }
-    
-    // Rebuild pairs and update view
-    rebuildPairs();
-    
-    emit pointRemoved(entry.pairIndex, entry.isFixed);
-    emit undoRedoStateChanged();
-    
-    return true;
-}
-
-bool TiePointModel::redoLastPoint()
-{
-    if (m_redoStack.isEmpty())
-        return false;
-    
-    UndoEntry entry = m_redoStack.pop();
-    
-    // Add the point back to the appropriate list
-    if (entry.isFixed) {
-        m_fixedPoints.append(PointEntry(entry.pairIndex, entry.position));
-    } else {
-        m_movingPoints.append(PointEntry(entry.pairIndex, entry.position));
-    }
-    
-    // Push back to undo stack
-    m_undoStack.push(entry);
-    
     // Update active stack
-    m_activeStack = entry.isFixed ? ActiveStack::Fixed : ActiveStack::Moving;
+    m_activeStack = ActiveStack::None;
     
     // Rebuild pairs and update view
     rebuildPairs();
     
-    emit pointAdded(entry.pairIndex, entry.isFixed);
-    emit undoRedoStateChanged();
-    
-    return true;
+    emit pointRemoved(pairIndex, isFixed);
 }
 
 // ============================================================================
@@ -403,16 +346,6 @@ int TiePointModel::completePairCount() const
     return count;
 }
 
-bool TiePointModel::canUndo() const
-{
-    return !m_undoStack.isEmpty();
-}
-
-bool TiePointModel::canRedo() const
-{
-    return !m_redoStack.isEmpty();
-}
-
 bool TiePointModel::hasBothPoints(int pairIndex) const
 {
     for (const TiePointPair &pair : m_pairs) {
@@ -434,10 +367,6 @@ void TiePointModel::addTiePoint(const QPointF &fixed, const QPointF &moving)
     m_fixedPoints.append(PointEntry(pairIndex, fixed));
     m_movingPoints.append(PointEntry(pairIndex, moving));
     
-    // Clear redo stack
-    m_redoStack.clear();
-    
-    // For legacy API, we don't add individual undo entries
     // Just rebuild pairs
     rebuildPairs();
     
@@ -465,30 +394,18 @@ void TiePointModel::removeTiePoint(int index)
         }
     }
     
-    // Remove from undo stack entries with this pair index
-    QStack<UndoEntry> tempStack;
-    while (!m_undoStack.isEmpty()) {
-        UndoEntry entry = m_undoStack.pop();
-        if (entry.pairIndex != pairIndex) {
-            tempStack.push(entry);
-        }
-    }
-    while (!tempStack.isEmpty()) {
-        m_undoStack.push(tempStack.pop());
-    }
-    
     rebuildPairs();
     emit pointRemoved(pairIndex, true);
-    emit undoRedoStateChanged();
 }
 
-void TiePointModel::insertTiePoint(int index, const QPointF &fixed, const QPointF &moving)
+void TiePointModel::insertTiePoint(int index, const QPointF &fixed, const QPointF &moving, int pairIndex)
 {
-    // For legacy compatibility, we need to insert at a specific position
-    // Use the next available pair index
-    int pairIndex = getNextPairIndex();
+    // If pairIndex is not specified, get the next available one
+    if (pairIndex < 0) {
+        pairIndex = getNextPairIndex();
+    }
     
-    // Add to storage
+    // Add to storage with the specified pairIndex
     m_fixedPoints.append(PointEntry(pairIndex, fixed));
     m_movingPoints.append(PointEntry(pairIndex, moving));
     
@@ -496,6 +413,13 @@ void TiePointModel::insertTiePoint(int index, const QPointF &fixed, const QPoint
     rebuildPairs();
     
     emit pairCompleted(pairIndex);
+}
+
+int TiePointModel::getPairIndexAt(int index) const
+{
+    if (index < 0 || index >= m_pairs.count())
+        return -1;
+    return m_pairs.at(index).index;
 }
 
 void TiePointModel::clearAll()
@@ -506,14 +430,11 @@ void TiePointModel::clearAll()
     beginResetModel();
     m_fixedPoints.clear();
     m_movingPoints.clear();
-    m_undoStack.clear();
-    m_redoStack.clear();
     m_pairs.clear();
     m_activeStack = ActiveStack::None;
     endResetModel();
     
     emit modelCleared();
-    emit undoRedoStateChanged();
 }
 
 TiePoint TiePointModel::getTiePoint(int index) const

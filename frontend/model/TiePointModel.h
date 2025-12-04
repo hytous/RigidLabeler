@@ -4,7 +4,6 @@
 #include <QAbstractTableModel>
 #include <QList>
 #include <QPointF>
-#include <QStack>
 #include <optional>
 
 /**
@@ -56,7 +55,7 @@ enum class ActiveStack {
  * 
  * Uses separate storage for fixed and moving points, with index-based pairing.
  * Supports partial pairs (only fixed or only moving point set).
- * Provides undo capability for individual point additions.
+ * Undo/Redo is now managed externally via QUndoStack in MainWindow.
  */
 class TiePointModel : public QAbstractTableModel
 {
@@ -82,11 +81,12 @@ public:
     Qt::ItemFlags flags(const QModelIndex &index) const override;
     bool setData(const QModelIndex &index, const QVariant &value, int role = Qt::EditRole) override;
 
-    // New point management API
-    int addFixedPoint(const QPointF &point);      // Returns pair index
-    int addMovingPoint(const QPointF &point);     // Returns pair index
-    bool undoLastPoint();                          // Undo last added point (fixed or moving)
-    bool redoLastPoint();                          // Redo last undone point
+    // Direct point operations (for QUndoCommand use - no internal undo tracking)
+    int addFixedPointDirect(const QPointF &point);      // Returns pair index
+    int addMovingPointDirect(const QPointF &point);     // Returns pair index
+    int addFixedPointDirect(int pairIndex, const QPointF &point);  // Add to specific pair
+    int addMovingPointDirect(int pairIndex, const QPointF &point); // Add to specific pair
+    void removePointDirect(int pairIndex, bool isFixed);           // Remove specific point
     
     // Query methods
     TiePointPair getPair(int index) const;
@@ -95,14 +95,14 @@ public:
     int pairCount() const;                         // Total pairs (including incomplete)
     int completePairCount() const;                 // Only complete pairs
     ActiveStack getActiveStack() const { return m_activeStack; }
-    bool canUndo() const;
-    bool canRedo() const;
     bool hasBothPoints(int pairIndex) const;       // Check if pair is complete
+    int getNextPairIndex() const;                  // Get next available pair index
     
     // Legacy compatibility
     void addTiePoint(const QPointF &fixed, const QPointF &moving);
     void removeTiePoint(int index);
-    void insertTiePoint(int index, const QPointF &fixed, const QPointF &moving);
+    void insertTiePoint(int index, const QPointF &fixed, const QPointF &moving, int pairIndex = -1);
+    int getPairIndexAt(int index) const;  // Get the pairIndex for a given row
     void clearAll();
     int count() const { return pairCount(); }
     TiePoint getTiePoint(int index) const;
@@ -122,26 +122,15 @@ signals:
     void pointRemoved(int pairIndex, bool isFixed);
     void pairCompleted(int pairIndex);
     void modelCleared();
-    void undoRedoStateChanged();
 
 private:
     void rebuildPairs();
-    int getNextPairIndex() const;
     int findFixedPointIndex(int pairIndex) const;
     int findMovingPointIndex(int pairIndex) const;
     
     // Separate storage for points
     QList<PointEntry> m_fixedPoints;
     QList<PointEntry> m_movingPoints;
-    
-    // Undo/Redo stacks - store operation info
-    struct UndoEntry {
-        int pairIndex;
-        bool isFixed;
-        QPointF position;
-    };
-    QStack<UndoEntry> m_undoStack;
-    QStack<UndoEntry> m_redoStack;
     
     // Current active stack (which was last modified)
     ActiveStack m_activeStack;

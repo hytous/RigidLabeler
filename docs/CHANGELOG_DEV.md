@@ -4,6 +4,227 @@
 
 ---
 
+## #027 - 2025-12-04
+
+### 需求
+统一撤销系统，将原来的两套独立撤销栈合并为一套，使 Ctrl+Z 按操作时间顺序撤销，符合用户直觉。
+
+### 问题分析
+原有两套独立系统：
+1. `TiePointModel` 内置的 `m_undoStack`/`m_redoStack` - 用于撤销添加点
+2. `MainWindow` 的 `QUndoStack` - 用于撤销删除点
+
+问题：用户按时间顺序执行 `添加→添加→删除→添加`，但 Ctrl+Z 会先撤销所有「添加」，再撤销「删除」，不符合直觉。
+
+### 解决方案
+统一使用 `QUndoStack`（Qt Command Pattern），所有操作封装为 `QUndoCommand`。
+
+### 实现
+
+#### 新增 AddPointCommand 类
+```cpp
+class AddPointCommand : public QUndoCommand {
+    void redo() override {
+        m_pairIndex = m_model->addFixedPointDirect(m_position);  // 或 addMovingPointDirect
+    }
+    void undo() override {
+        m_model->removePointDirect(m_pairIndex, m_isFixed);
+    }
+};
+```
+
+#### TiePointModel 修改
+
+1. 移除内置撤销栈 (`m_undoStack`, `m_redoStack`)
+2. 移除 `canUndo()`, `canRedo()`, `undoLastPoint()`, `redoLastPoint()` 方法
+3. 移除 `undoRedoStateChanged` 信号
+4. 新增直接操作方法（供 Command 调用）：
+   - `addFixedPointDirect(const QPointF &point)` - 自动分配 pairIndex
+   - `addFixedPointDirect(int pairIndex, const QPointF &point)` - 指定 pairIndex
+   - `addMovingPointDirect(...)` - 同上
+   - `removePointDirect(int pairIndex, bool isFixed)` - 移除单个点
+
+#### MainWindow 修改
+
+1. 点击添加点时创建 `AddPointCommand` 并 push 到 `QUndoStack`
+2. 简化 `undo()`/`redo()` 函数，只使用 `QUndoStack`
+3. 更新 `updateActionStates()`，只检查 `QUndoStack` 状态
+
+### 效果
+- ✅ 按操作时间顺序撤销，符合用户直觉
+- ✅ 代码简化，只维护一套系统
+- ✅ 状态栏显示撤销/重做的操作名称
+
+---
+
+## #026 - 2025-12-04
+
+### 问题
+Ctrl+Z 撤销删除点对操作后，恢复的点编号（pairIndex）与原来不一致。
+
+### 分析
+`insertTiePoint()` 方法在恢复点时使用 `getNextPairIndex()` 分配新编号，而不是恢复原来的编号。`RemoveTiePointCommand` 也没有保存原始的 `pairIndex`。
+
+### 修复
+
+#### TiePointModel 修改
+
+1. `insertTiePoint()` 添加可选的 `pairIndex` 参数：
+```cpp
+void insertTiePoint(int index, const QPointF &fixed, const QPointF &moving, int pairIndex = -1);
+```
+
+2. 添加 `getPairIndexAt()` 方法获取指定行的 pairIndex：
+```cpp
+int TiePointModel::getPairIndexAt(int index) const
+{
+    if (index < 0 || index >= m_pairs.count())
+        return -1;
+    return m_pairs.at(index).index;
+}
+```
+
+#### RemoveTiePointCommand 修改
+
+保存并恢复原始的 pairIndex：
+```cpp
+RemoveTiePointCommand(...) {
+    // ...
+    m_pairIndex = m_model->getPairIndexAt(index);  // 保存原始编号
+}
+
+void undo() override {
+    m_model->insertTiePoint(m_index, m_fixed, m_moving, m_pairIndex);  // 恢复时使用原编号
+}
+```
+
+---
+
+## #025 - 2025-12-04
+
+### 问题
+关闭前设置语言为中文，重新打开程序后虽然设置中的语言选项显示为中文，但整个界面仍然是英文。
+
+### 分析
+在构造函数中，`setupUi(ui)` 先执行，此时界面用英文初始化。之后恢复语言设置时虽然加载了中文翻译器 (`qApp->installTranslator(m_translator)`)，但没有调用 `ui->retranslateUi(this)` 来重新翻译界面元素。
+
+### 修复
+在成功安装翻译器后，立即调用 `ui->retranslateUi(this)` 更新界面文本：
+
+```cpp
+if (m_translator->load(translationPath) || m_translator->load("rigidlabeler_zh", ":/translations")) {
+    qApp->installTranslator(m_translator);
+    // Re-translate the UI after installing translator
+    ui->retranslateUi(this);  // 添加：重新翻译界面
+}
+```
+
+---
+
+## #024 - 2025-12-04
+
+### 问题
+Ctrl+Z 撤销删除点对操作后，数据模型中的点被恢复，但界面上的十字标记没有重新绘制。
+
+### 分析
+`undo()` 和 `redo()` 函数在通过 `QUndoStack` 执行撤销/重做时，没有调用 `updatePointDisplay()` 来刷新界面显示。
+
+### 修复
+在 `m_undoStack->undo()` 和 `m_undoStack->redo()` 调用后添加界面刷新：
+
+```cpp
+// undo()
+if (m_undoStack->canUndo()) {
+    m_undoStack->undo();
+    m_hasValidTransform = false;
+    updatePointDisplay();  // 添加：刷新点标记显示
+    updateActionStates();
+    statusBar()->showMessage(tr("Undo: Tie point(s) restored"), 2000);
+}
+
+// redo()
+if (m_undoStack->canRedo()) {
+    m_undoStack->redo();
+    m_hasValidTransform = false;
+    updatePointDisplay();  // 添加：刷新点标记显示
+    updateActionStates();
+    statusBar()->showMessage(tr("Redo: Tie point(s) deleted"), 2000);
+}
+```
+
+---
+
+## #023 - 2025-12-02
+
+### 问题
+点击单独的"上一张Fixed"/"下一张Fixed"/"上一张Moving"/"下一张Moving"按钮时不会清除控制点和变换结果，而"Next Pair"按钮会清除。
+
+### 分析
+`prevPair()` 和 `nextPair()` 函数包含清除逻辑，但各个独立的图像导航函数 (`prevFixedImage()`、`nextFixedImage()`、`prevMovingImage()`、`nextMovingImage()`) 以及加载函数 (`loadFixedImage()`、`loadMovingImage()`) 没有清除逻辑。
+
+### 修复
+
+#### 修改导航函数
+为所有 4 个导航函数添加相同的清除逻辑：
+```cpp
+void MainWindow::prevFixedImage()
+{
+    if (m_fixedImageIndex <= 0)
+        return;
+    
+    // 切换前保存当前控制点
+    saveProjectState();
+    
+    // 清除当前控制点和变换结果
+    m_tiePointModel->clearAll();
+    m_hasValidTransform = false;
+    ui->txtResult->clear();
+    
+    loadFixedImageByIndex(m_fixedImageIndex - 1);
+}
+```
+
+#### 修改加载函数
+`loadFixedImage()` 和 `loadMovingImage()` 对话框加载成功后也执行清除：
+```cpp
+if (m_imagePairModel->loadFixedImage(fileName)) {
+    // ... 更新索引和状态 ...
+    
+    // 清除控制点和变换结果
+    m_tiePointModel->clearAll();
+    m_hasValidTransform = false;
+    ui->txtResult->clear();
+}
+```
+
+#### 重构 Pair 导航
+`prevPair()` 和 `nextPair()` 改为直接调用 `loadXxxImageByIndex()` 而不是调用导航函数，避免重复清除：
+```cpp
+void MainWindow::nextPair()
+{
+    // 检查是否可以前进
+    bool canNextFixed = ...;
+    bool canNextMoving = ...;
+    if (!canNextFixed && !canNextMoving)
+        return;
+    
+    saveProjectState();
+    m_tiePointModel->clearAll();
+    m_hasValidTransform = false;
+    ui->txtResult->clear();
+    
+    // 直接加载，不再调用导航函数
+    if (canNextFixed) {
+        loadFixedImageByIndex(m_fixedImageIndex + 1);
+    }
+    if (canNextMoving) {
+        loadMovingImageByIndex(m_movingImageIndex + 1);
+    }
+}
+```
+
+---
+
 ## #022 - 2025-12-02
 
 ### 需求
