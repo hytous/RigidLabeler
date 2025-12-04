@@ -63,7 +63,7 @@ cd packaging
 
 成功后，安装程序位于：
 ```
-packaging/Output/RigidLabeler_Setup_1.0.0.exe
+packaging/Output/RigidLabeler_Setup_1.0.1.exe
 ```
 
 ## 目录结构
