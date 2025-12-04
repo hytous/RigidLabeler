@@ -661,7 +661,7 @@
     <string>&amp;Redo</string>
    </property>
    <property name="shortcut">
-    <string>Ctrl+Y</string>
+    <string>Ctrl+Shift+Z</string>
    </property>
   </action>
   <action name="actionClearPoints">

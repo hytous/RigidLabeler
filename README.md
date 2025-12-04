@@ -212,7 +212,7 @@ make  # Linux/macOS
   - Shift + 拖动：框选多个点
 - **快捷键**
   - Ctrl+Z：撤销操作
-  - Ctrl+Y：重做操作
+  - Ctrl+Shift+Z：重做操作
   - Ctrl+1：加载 Fixed 图像
   - Ctrl+2：加载 Moving 图像
   - Ctrl+R：计算变换
