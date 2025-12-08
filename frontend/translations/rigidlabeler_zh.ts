@@ -697,8 +697,8 @@ ID: %1
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1222"/>
-        <source>&lt;h2&gt;RigidLabeler&lt;/h2&gt;&lt;p&gt;A 2D geometric transformation labeling tool.&lt;/p&gt;&lt;p&gt;Version 1.0.1&lt;/p&gt;&lt;p&gt;This tool allows you to:&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Load image pairs (fixed and moving)&lt;/li&gt;&lt;li&gt;Define tie points between images&lt;/li&gt;&lt;li&gt;Compute rigid/similarity/affine transforms&lt;/li&gt;&lt;li&gt;Save and load transformation labels&lt;/li&gt;&lt;/ul&gt;</source>
-        <translation>&lt;h2&gt;RigidLabeler&lt;/h2&gt;&lt;p&gt;2D几何变换标注工具。&lt;/p&gt;&lt;p&gt;版本 1.0.1&lt;/p&gt;&lt;p&gt;本工具可以:&lt;/p&gt;&lt;ul&gt;&lt;li&gt;加载图像对 (固定和移动图像)&lt;/li&gt;&lt;li&gt;定义图像间的对应点&lt;/li&gt;&lt;li&gt;计算刚性/相似/仿射变换&lt;/li&gt;&lt;li&gt;保存和加载变换标签&lt;/li&gt;&lt;/ul&gt;</translation>
+        <source>&lt;h2&gt;RigidLabeler&lt;/h2&gt;&lt;p&gt;A 2D geometric transformation labeling tool.&lt;/p&gt;&lt;p&gt;Version 1.0.2&lt;/p&gt;&lt;p&gt;This tool allows you to:&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Load image pairs (fixed and moving)&lt;/li&gt;&lt;li&gt;Define tie points between images&lt;/li&gt;&lt;li&gt;Compute rigid/similarity/affine transforms&lt;/li&gt;&lt;li&gt;Save and load transformation labels&lt;/li&gt;&lt;/ul&gt;</source>
+        <translation>&lt;h2&gt;RigidLabeler&lt;/h2&gt;&lt;p&gt;2D几何变换标注工具。&lt;/p&gt;&lt;p&gt;版本 1.0.2&lt;/p&gt;&lt;p&gt;本工具可以:&lt;/p&gt;&lt;ul&gt;&lt;li&gt;加载图像对 (固定和移动图像)&lt;/li&gt;&lt;li&gt;定义图像间的对应点&lt;/li&gt;&lt;li&gt;计算刚性/相似/仿射变换&lt;/li&gt;&lt;li&gt;保存和加载变换标签&lt;/li&gt;&lt;/ul&gt;</translation>
     </message>
     <message>
         <source>Select GT Export Root Folder</source>

@@ -1,6 +1,6 @@
 # RigidLabeler Backend API Spec
 
-Version: `v1.0.1`  
+Version: `v1.0.2`  
 Base URL: `http://127.0.0.1:8000`
 
 ## 1. 总体约定
@@ -186,7 +186,7 @@ Base URL: `http://127.0.0.1:8000`
 
 ```json
 {
-  "version": "1.0.1",
+  "version": "1.0.2",
   "backend": "fastapi"
 }
 ```
@@ -261,7 +261,7 @@ Base URL: `http://127.0.0.1:8000`
   "message": "rigidlabeler backend alive",
   "error_code": null,
   "data": {
-    "version": "1.0.1",
+    "version": "1.0.2",
     "backend": "fastapi"
   }
 }

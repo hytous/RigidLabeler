@@ -2,7 +2,7 @@
 ; This script creates a professional Windows installer
 
 #define MyAppName "RigidLabeler"
-#define MyAppVersion "1.0.1"
+#define MyAppVersion "1.0.2"
 #define MyAppPublisher "RigidLabeler Team"
 #define MyAppURL "https://github.com/hytous/RigidLabeler"
 #define MyAppExeName "RigidLabeler.exe"

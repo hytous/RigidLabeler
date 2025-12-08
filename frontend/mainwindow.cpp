@@ -1274,7 +1274,7 @@ void MainWindow::showAbout()
     QMessageBox::about(this, tr("About RigidLabeler"),
         tr("<h2>RigidLabeler</h2>"
            "<p>A 2D geometric transformation labeling tool.</p>"
-           "<p>Version 1.0.1</p>"
+           "<p>Version 1.0.2</p>"
            "<p>This tool allows you to:</p>"
            "<ul>"
            "<li>Load image pairs (fixed and moving)</li>"
