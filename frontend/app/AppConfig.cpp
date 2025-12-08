@@ -250,6 +250,16 @@ void AppConfig::setOptionOriginTopLeft(bool value)
     m_settings->setValue("options/originTopLeft", value);
 }
 
+bool AppConfig::optionNormalizedMatrix() const
+{
+    return m_settings->value("options/normalizedMatrix", true).toBool();
+}
+
+void AppConfig::setOptionNormalizedMatrix(bool value)
+{
+    m_settings->setValue("options/normalizedMatrix", value);
+}
+
 bool AppConfig::optionShowPointLabels() const
 {
     return m_settings->value("options/showPointLabels", true).toBool();

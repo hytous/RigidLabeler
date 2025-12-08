@@ -106,7 +106,12 @@ async def compute_rigid(request: ComputeRigidRequest):
     - rigid: rotation + translation (2 points minimum)
     - similarity: rotation + translation + uniform scale (2 points minimum)
     - affine: full 6-DOF transformation (3 points minimum)
+    
+    When use_normalized_matrix=True, the returned matrix operates in normalized
+    [-1,1] coordinates instead of pixel coordinates (compatible with PyTorch affine_grid).
     """
+    from ..core.transforms import pixel_matrix_to_normalized
+    
     # Determine transform mode
     # If transform_mode is explicitly set, use it; otherwise fall back to allow_scale
     if hasattr(request, 'transform_mode') and request.transform_mode:
@@ -128,6 +133,19 @@ async def compute_rigid(request: ComputeRigidRequest):
             f"(got {len(request.tie_points)}, need at least {min_required})"
         )
     
+    # Validate normalized matrix requirements
+    if request.use_normalized_matrix:
+        if request.fixed_image_size is None or request.moving_image_size is None:
+            return ApiResponse.error(
+                ErrorCode.INVALID_INPUT,
+                "fixed_image_size and moving_image_size are required when use_normalized_matrix=True"
+            )
+        if len(request.fixed_image_size) != 2 or len(request.moving_image_size) != 2:
+            return ApiResponse.error(
+                ErrorCode.INVALID_INPUT,
+                "Image sizes must be [width, height]"
+            )
+    
     # Extract point coordinates
     fixed_points = np.array([
         [tp.fixed.x, tp.fixed.y] for tp in request.tie_points
@@ -143,6 +161,15 @@ async def compute_rigid(request: ComputeRigidRequest):
             mode=mode
         )
         
+        # Convert to normalized matrix if requested
+        output_matrix = result.matrix_3x3
+        if request.use_normalized_matrix:
+            output_matrix = pixel_matrix_to_normalized(
+                result.matrix_3x3,
+                tuple(request.fixed_image_size),
+                tuple(request.moving_image_size)
+            )
+        
         return ApiResponse.ok(
             data=ComputeRigidResult(
                 rigid=RigidParams(
@@ -153,7 +180,7 @@ async def compute_rigid(request: ComputeRigidRequest):
                     scale_y=result.scale_y,
                     shear=result.shear
                 ),
-                matrix_3x3=result.matrix_3x3.tolist(),
+                matrix_3x3=output_matrix.tolist(),
                 rms_error=result.rms_error,
                 num_points=result.num_points
             )
@@ -382,7 +409,8 @@ async def checkerboard_preview_endpoint(request: CheckerboardPreviewRequest):
             moving_path=request.image_moving,
             matrix_3x3=matrix,
             board_size=request.board_size,
-            use_center_origin=request.use_center_origin
+            use_center_origin=request.use_center_origin,
+            use_normalized_matrix=request.use_normalized_matrix
         )
         
         return ApiResponse.ok(

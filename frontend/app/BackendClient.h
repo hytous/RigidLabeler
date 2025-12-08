@@ -7,6 +7,7 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QPointF>
+#include <QSize>
 #include <functional>
 
 struct TiePoint;
@@ -115,7 +116,10 @@ public:
     void healthCheck();
     void computeRigid(const QList<QPair<QPointF, QPointF>> &tiePoints, 
                       const QString &transformMode = "affine",
-                      int minPointsRequired = 2);
+                      int minPointsRequired = 2,
+                      bool useNormalizedMatrix = false,
+                      const QSize &fixedImageSize = QSize(),
+                      const QSize &movingImageSize = QSize());
     void saveLabel(const QString &imageFixed,
                    const QString &imageMoving,
                    const RigidParams &rigid,
@@ -128,7 +132,10 @@ public:
                                     const QString &imageMoving,
                                     const QVector<QVector<double>> &matrix3x3,
                                     int boardSize = 8,
-                                    bool useCenterOrigin = false);
+                                    bool useCenterOrigin = false,
+                                    bool useNormalizedMatrix = false,
+                                    const QSize &fixedImageSize = QSize(),
+                                    const QSize &movingImageSize = QSize());
 
 signals:
     void healthCheckCompleted(const HealthCheckResult &result);

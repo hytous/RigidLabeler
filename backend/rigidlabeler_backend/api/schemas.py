@@ -172,6 +172,18 @@ class ComputeRigidRequest(BaseModel):
         default=2,
         description="Minimum number of points required"
     )
+    use_normalized_matrix: bool = Field(
+        default=False,
+        description="If true, return matrix in normalized [-1,1] coordinates instead of pixel coordinates. Only valid when using center origin."
+    )
+    fixed_image_size: Optional[List[int]] = Field(
+        default=None,
+        description="[width, height] of fixed image, required when use_normalized_matrix=true"
+    )
+    moving_image_size: Optional[List[int]] = Field(
+        default=None,
+        description="[width, height] of moving image, required when use_normalized_matrix=true"
+    )
 
 
 class LabelSaveRequest(BaseModel):
@@ -225,7 +237,11 @@ class CheckerboardPreviewRequest(BaseModel):
     )
     use_center_origin: bool = Field(
         default=False,
-        description="If true, the matrix was computed with image center as origin"
+        description="If true, the matrix was computed with image center as origin (pixel coordinates)"
+    )
+    use_normalized_matrix: bool = Field(
+        default=False,
+        description="If true, the matrix is in normalized [-1,1] coordinates"
     )
 
 

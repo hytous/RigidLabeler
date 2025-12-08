@@ -64,6 +64,8 @@ public:
     // UI Options state (persistent across sessions)
     bool optionOriginTopLeft() const;
     void setOptionOriginTopLeft(bool value);
+    bool optionNormalizedMatrix() const;
+    void setOptionNormalizedMatrix(bool value);
     bool optionShowPointLabels() const;
     void setOptionShowPointLabels(bool value);
     bool optionSyncZoom() const;

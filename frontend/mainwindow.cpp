@@ -140,6 +140,7 @@ MainWindow::MainWindow(QWidget *parent)
     , m_realtimeComputeEnabled(false)
     , m_realtimeComputePending(false)
     , m_useTopLeftOrigin(false)  // Default: use image center as origin
+    , m_useNormalizedMatrix(true)  // Default: use normalized matrix [-1,1]
     , m_previewDialog(nullptr)
     , m_currentPreviewGridSize(8)
     , m_showPointLabels(true)  // Default: show point labels
@@ -200,6 +201,10 @@ MainWindow::MainWindow(QWidget *parent)
     // Restore UI options from settings (BEFORE setupConnections to avoid triggering saves)
     ui->chkOriginTopLeft->setChecked(AppConfig::instance().optionOriginTopLeft());
     m_useTopLeftOrigin = AppConfig::instance().optionOriginTopLeft();
+    ui->chkNormalizedMatrix->setChecked(AppConfig::instance().optionNormalizedMatrix());
+    m_useNormalizedMatrix = AppConfig::instance().optionNormalizedMatrix();
+    // Normalized matrix option only available when using center origin
+    ui->chkNormalizedMatrix->setEnabled(!m_useTopLeftOrigin);
     ui->chkShowPointLabels->setChecked(AppConfig::instance().optionShowPointLabels());
     m_showPointLabels = AppConfig::instance().optionShowPointLabels();
     ui->chkSyncZoom->setChecked(AppConfig::instance().optionSyncZoom());
@@ -335,6 +340,29 @@ void MainWindow::setupConnections()
     connect(ui->chkOriginTopLeft, &QCheckBox::toggled, this, [this](bool checked) {
         onOriginModeToggled(checked);
         AppConfig::instance().setOptionOriginTopLeft(checked);
+        // Normalized matrix option only available when using center origin
+        ui->chkNormalizedMatrix->setEnabled(!checked);
+        if (checked) {
+            // Force pixel matrix when using top-left origin
+            m_useNormalizedMatrix = false;
+        } else {
+            // Restore from checkbox state
+            m_useNormalizedMatrix = ui->chkNormalizedMatrix->isChecked();
+        }
+    });
+    connect(ui->chkNormalizedMatrix, &QCheckBox::toggled, this, [this](bool checked) {
+        m_useNormalizedMatrix = checked;
+        AppConfig::instance().setOptionNormalizedMatrix(checked);
+        if (checked) {
+            statusBar()->showMessage(tr("Matrix mode: Normalized [-1,1] (PyTorch compatible)"), 2000);
+        } else {
+            statusBar()->showMessage(tr("Matrix mode: Pixel coordinates"), 2000);
+        }
+        // Auto recompute if we have enough points to avoid preview mismatch
+        int minPoints = AppConfig::instance().minPointsRequired();
+        if (m_tiePointModel->completePairCount() >= minPoints) {
+            computeTransform();
+        }
     });
     connect(ui->chkRealtimeCompute, &QCheckBox::toggled, this, &MainWindow::onRealtimeComputeToggled);
     connect(ui->chkShowPointLabels, &QCheckBox::toggled, this, [this](bool checked) {
@@ -804,10 +832,27 @@ void MainWindow::computeTransform()
         default: transformMode = "affine"; break;
     }
     
+    // Get image sizes for normalized matrix
+    QSize fixedSize, movingSize;
+    if (m_fixedPixmapItem) {
+        QPixmap pm = m_fixedPixmapItem->pixmap();
+        fixedSize = pm.size();
+    }
+    if (m_movingPixmapItem) {
+        QPixmap pm = m_movingPixmapItem->pixmap();
+        movingSize = pm.size();
+    }
+    
+    // Use normalized matrix only when center origin is used
+    bool useNormalized = m_useNormalizedMatrix && !m_useTopLeftOrigin;
+    
     m_backendClient->computeRigid(
         tiePoints,
         transformMode,
-        minPoints
+        minPoints,
+        useNormalized,
+        fixedSize,
+        movingSize
     );
     
     statusBar()->showMessage(tr("Computing transform..."), 2000);
@@ -844,14 +889,18 @@ void MainWindow::previewWarp()
     m_previewDialog->activateWindow();
     
     // Request checkerboard preview from backend
-    // Note: use_center_origin should be true when m_useTopLeftOrigin is false
-    // because the matrix was computed with center origin when m_useTopLeftOrigin is false
+    // use_center_origin: matrix uses center origin pixel coordinates (when m_useTopLeftOrigin is false)
+    // use_normalized_matrix: matrix is in normalized [-1,1] coordinates
+    bool useCenterOrigin = !m_useTopLeftOrigin && !m_useNormalizedMatrix;
+    bool useNormalized = m_useNormalizedMatrix && !m_useTopLeftOrigin;
+    
     m_backendClient->requestCheckerboardPreview(
         m_imagePairModel->fixedImagePath(),
         m_imagePairModel->movingImagePath(),
         m_currentMatrix,
         m_currentPreviewGridSize,
-        !m_useTopLeftOrigin  // use_center_origin = !m_useTopLeftOrigin
+        useCenterOrigin,
+        useNormalized
     );
     
     statusBar()->showMessage(tr("Generating checkerboard preview..."), 3000);
@@ -1201,12 +1250,16 @@ void MainWindow::onPreviewRefreshRequested(int gridSize)
     }
     
     // Request new preview with updated grid size
+    bool useCenterOrigin = !m_useTopLeftOrigin && !m_useNormalizedMatrix;
+    bool useNormalized = m_useNormalizedMatrix && !m_useTopLeftOrigin;
+    
     m_backendClient->requestCheckerboardPreview(
         m_imagePairModel->fixedImagePath(),
         m_imagePairModel->movingImagePath(),
         m_currentMatrix,
         gridSize,
-        !m_useTopLeftOrigin  // use_center_origin = !m_useTopLeftOrigin
+        useCenterOrigin,
+        useNormalized
     );
     
     statusBar()->showMessage(tr("Refreshing preview with grid size %1...").arg(gridSize), 2000);

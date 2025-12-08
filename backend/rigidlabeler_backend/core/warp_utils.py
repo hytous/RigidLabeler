@@ -98,7 +98,8 @@ def create_affine_grid(
     matrix_3x3: np.ndarray,
     output_size: Tuple[int, int],
     input_size: Tuple[int, int],
-    use_center_origin: bool = False
+    use_center_origin: bool = False,
+    use_normalized_matrix: bool = False
 ) -> "torch.Tensor":
     """Create sampling grid for affine transformation.
     
@@ -117,7 +118,8 @@ def create_affine_grid(
         matrix_3x3: 3x3 transformation matrix (moving -> fixed).
         output_size: (height, width) of output (fixed image size).
         input_size: (height, width) of input (moving image size).
-        use_center_origin: If True, the matrix was computed with center origin.
+        use_center_origin: If True, the matrix was computed with center origin (pixel coords).
+        use_normalized_matrix: If True, the matrix is already in normalized [-1,1] coords.
         
     Returns:
         Sampling grid tensor of shape (1, H, W, 2).
@@ -142,8 +144,21 @@ def create_affine_grid(
     # Convert matrix to torch
     M = torch.from_numpy(matrix_3x3.astype(np.float32))
     
-    if use_center_origin:
-        # Matrix was computed with center origin for both images
+    if use_normalized_matrix:
+        # Matrix is already in normalized [-1,1] coordinates
+        # Directly apply inverse transformation in normalized space
+        
+        # Add homogeneous coordinate
+        ones = torch.ones(grid_flat.shape[0], 1)
+        grid_homo = torch.cat([grid_flat, ones], dim=1)  # (H*W, 3)
+        
+        # Apply inverse transformation
+        M_inv = torch.inverse(M)
+        source_homo = (M_inv @ grid_homo.T).T  # (H*W, 3)
+        source_norm = source_homo[:, :2] / source_homo[:, 2:3]
+        
+    elif use_center_origin:
+        # Matrix was computed with center origin for both images (pixel coordinates)
         # Fixed image center: (0, 0) in center-origin coords
         # Moving image center: (0, 0) in center-origin coords
         
@@ -200,7 +215,8 @@ def warp_image_torch(
     image: np.ndarray,
     matrix_3x3: np.ndarray,
     output_size: Tuple[int, int],
-    use_center_origin: bool = False
+    use_center_origin: bool = False,
+    use_normalized_matrix: bool = False
 ) -> np.ndarray:
     """Warp an image using PyTorch grid_sample.
     
@@ -208,7 +224,8 @@ def warp_image_torch(
         image: Input image (H, W, C) as numpy array (moving image).
         matrix_3x3: 3x3 transformation matrix (moving -> fixed).
         output_size: (height, width) of output (fixed image size).
-        use_center_origin: If True, the matrix was computed with center origin.
+        use_center_origin: If True, the matrix was computed with center origin (pixel coords).
+        use_normalized_matrix: If True, the matrix is in normalized [-1,1] coordinates.
         
     Returns:
         Warped image (H, W, C) as numpy array, same size as output_size.
@@ -223,7 +240,7 @@ def warp_image_torch(
     img_tensor = numpy_to_tensor(image)
     
     # Create sampling grid with both input and output sizes
-    grid = create_affine_grid(matrix_3x3, output_size, input_size, use_center_origin)
+    grid = create_affine_grid(matrix_3x3, output_size, input_size, use_center_origin, use_normalized_matrix)
     
     # Apply grid sample
     warped_tensor = F.grid_sample(
@@ -301,7 +318,8 @@ def generate_checkerboard_preview(
     moving_path: str,
     matrix_3x3: np.ndarray,
     board_size: int = 8,
-    use_center_origin: bool = False
+    use_center_origin: bool = False,
+    use_normalized_matrix: bool = False
 ) -> Tuple[str, int, int]:
     """Generate a checkerboard preview image.
     
@@ -310,7 +328,8 @@ def generate_checkerboard_preview(
         moving_path: Path to moving image.
         matrix_3x3: 3x3 transformation matrix.
         board_size: Number of grid cells.
-        use_center_origin: If True, matrix was computed with center origin.
+        use_center_origin: If True, matrix was computed with center origin (pixel coords).
+        use_normalized_matrix: If True, matrix is in normalized [-1,1] coordinates.
         
     Returns:
         Tuple of (base64_encoded_png, width, height).
@@ -330,7 +349,8 @@ def generate_checkerboard_preview(
         moving_img,
         matrix_3x3,
         (H, W),
-        use_center_origin
+        use_center_origin,
+        use_normalized_matrix
     )
     
     # Create checkerboard

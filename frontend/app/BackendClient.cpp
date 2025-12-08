@@ -103,7 +103,10 @@ void BackendClient::handleHealthReply()
 
 void BackendClient::computeRigid(const QList<QPair<QPointF, QPointF>> &tiePoints,
                                   const QString &transformMode,
-                                  int minPointsRequired)
+                                  int minPointsRequired,
+                                  bool useNormalizedMatrix,
+                                  const QSize &fixedImageSize,
+                                  const QSize &movingImageSize)
 {
     QJsonArray pointsArray;
     for (const auto &pair : tiePoints) {
@@ -117,6 +120,19 @@ void BackendClient::computeRigid(const QList<QPair<QPointF, QPointF>> &tiePoints
     requestBody["tie_points"] = pointsArray;
     requestBody["transform_mode"] = transformMode;
     requestBody["min_points_required"] = minPointsRequired;
+    requestBody["use_normalized_matrix"] = useNormalizedMatrix;
+    
+    if (useNormalizedMatrix && fixedImageSize.isValid() && movingImageSize.isValid()) {
+        QJsonArray fixedSizeArray;
+        fixedSizeArray.append(fixedImageSize.width());
+        fixedSizeArray.append(fixedImageSize.height());
+        requestBody["fixed_image_size"] = fixedSizeArray;
+        
+        QJsonArray movingSizeArray;
+        movingSizeArray.append(movingImageSize.width());
+        movingSizeArray.append(movingImageSize.height());
+        requestBody["moving_image_size"] = movingSizeArray;
+    }
     
     QNetworkRequest request = createRequest("/compute/rigid");
     QNetworkReply *reply = m_networkManager->post(request, QJsonDocument(requestBody).toJson());
@@ -405,8 +421,14 @@ void BackendClient::requestCheckerboardPreview(const QString &imageFixed,
                                                 const QString &imageMoving,
                                                 const QVector<QVector<double>> &matrix3x3,
                                                 int boardSize,
-                                                bool useCenterOrigin)
+                                                bool useCenterOrigin,
+                                                bool useNormalizedMatrix,
+                                                const QSize &fixedImageSize,
+                                                const QSize &movingImageSize)
 {
+    Q_UNUSED(fixedImageSize)
+    Q_UNUSED(movingImageSize)
+    
     QJsonArray matrixArray;
     for (const auto &row : matrix3x3) {
         QJsonArray rowArray;
@@ -422,6 +444,7 @@ void BackendClient::requestCheckerboardPreview(const QString &imageFixed,
     requestBody["matrix_3x3"] = matrixArray;
     requestBody["board_size"] = boardSize;
     requestBody["use_center_origin"] = useCenterOrigin;
+    requestBody["use_normalized_matrix"] = useNormalizedMatrix;
     
     QNetworkRequest request = createRequest("/warp/checkerboard");
     QNetworkReply *reply = m_networkManager->post(request, QJsonDocument(requestBody).toJson());

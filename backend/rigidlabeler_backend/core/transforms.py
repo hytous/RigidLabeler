@@ -141,41 +141,42 @@ def compute_affine_transform(
         [0.0, 0.0, 1.0]
     ])
     
-    # Decompose affine matrix into rotation, scale, and shear
-    # A = R @ S @ Shear, where R is rotation, S is scale
-    # Using polar decomposition / SVD decomposition
+    # Decompose affine matrix into rotation, scale, and shear using QR decomposition
+    # A = Q @ R, where Q is orthogonal (rotation), R is upper triangular
+    # The model: A = Rotation @ [[sx, shear*sy], [0, sy]]
     
     # Extract the 2x2 linear part
     linear = matrix_3x3[0:2, 0:2]
     
-    # SVD decomposition: linear = U @ Sigma @ V^T
-    U, sigma, Vt = np.linalg.svd(linear)
+    # QR decomposition
+    Q, R_qr = np.linalg.qr(linear)
     
-    # Scale factors are the singular values
-    scale_x = sigma[0]
-    scale_y = sigma[1]
+    # Ensure Q is a pure rotation (det > 0)
+    if np.linalg.det(Q) < 0:
+        Q[:, 1] *= -1
+        R_qr[1, :] *= -1
     
-    # Check for reflection and correct
-    if np.linalg.det(U) * np.linalg.det(Vt) < 0:
-        # Flip sign to ensure proper rotation
+    # Scale factors from R diagonal
+    scale_x = R_qr[0, 0]
+    scale_y = R_qr[1, 1]
+    
+    # Handle negative scales by absorbing sign into Q
+    if scale_x < 0:
+        scale_x = -scale_x
+        Q[:, 0] *= -1
+        R_qr[0, :] *= -1
+    
+    if scale_y < 0:
         scale_y = -scale_y
-        U[:, 1] *= -1
+        Q[:, 1] *= -1
+        R_qr[1, :] *= -1
     
-    # Rotation matrix R = U @ V^T
-    R = U @ Vt
-    
-    # Rotation angle
-    theta_rad = np.arctan2(R[1, 0], R[0, 0])
+    # Rotation angle from Q (must be computed AFTER handling negative scales)
+    theta_rad = np.arctan2(Q[1, 0], Q[0, 0])
     theta_deg = np.degrees(theta_rad)
     
-    # Compute shear (from the decomposition A = R @ [[sx, shear*sy], [0, sy]])
-    # For simplicity, we compute shear as deviation from pure rotation+scale
-    # shear = (a*c + b*d) / (scale_x * scale_y) approximately
-    # A simpler approach: shear represents the off-diagonal contribution
-    R_inv = R.T
-    scaled_shear_matrix = R_inv @ linear
-    # scaled_shear_matrix should be approximately [[sx, shear], [0, sy]]
-    shear = scaled_shear_matrix[0, 1] / scale_y if abs(scale_y) > 1e-10 else 0.0
+    # Shear factor from R upper triangular
+    shear = R_qr[0, 1] / scale_y if abs(scale_y) > 1e-10 else 0.0
     
     # Compute RMS error
     transformed_src = transform_points(src_pts, matrix_3x3)
@@ -504,7 +505,11 @@ def matrix_to_rigid_params(matrix_3x3: np.ndarray) -> Tuple[float, float, float,
 def matrix_to_affine_params(matrix_3x3: np.ndarray) -> Tuple[float, float, float, float, float, float]:
     """Extract affine parameters from 3x3 homogeneous transformation matrix.
     
-    Uses SVD decomposition to extract rotation, non-uniform scale, and shear.
+    Uses QR decomposition to extract rotation, non-uniform scale, and shear.
+    Decomposes A = Q @ R where Q is orthogonal (rotation) and R is upper triangular.
+    
+    The affine matrix is modeled as: A = Rotation @ [[sx, shear*sy], [0, sy]]
+    Coordinate origin is at image center (0, 0).
     
     Args:
         matrix_3x3: 3x3 transformation matrix.
@@ -512,38 +517,43 @@ def matrix_to_affine_params(matrix_3x3: np.ndarray) -> Tuple[float, float, float
     Returns:
         Tuple of (theta_deg, tx, ty, scale_x, scale_y, shear).
     """
-    # Extract the 2x2 linear part
-    linear = matrix_3x3[0:2, 0:2]
-    
-    # SVD decomposition: linear = U @ Sigma @ V^T
-    U, sigma, Vt = np.linalg.svd(linear)
-    
-    # Scale factors are the singular values
-    scale_x = sigma[0]
-    scale_y = sigma[1]
-    
-    # Check for reflection and correct
-    if np.linalg.det(U) * np.linalg.det(Vt) < 0:
-        scale_y = -scale_y
-        U[:, 1] *= -1
-    
-    # Rotation matrix R = U @ V^T
-    R = U @ Vt
-    
-    # Rotation angle
-    theta_rad = np.arctan2(R[1, 0], R[0, 0])
-    theta_deg = np.degrees(theta_rad)
-    
-    # Compute shear
-    R_inv = R.T
-    scaled_shear_matrix = R_inv @ linear
-    shear = scaled_shear_matrix[0, 1] / scale_y if abs(scale_y) > 1e-10 else 0.0
-    
-    # Translation
+    # Extract the 2x2 linear part and translation
+    A = matrix_3x3[0:2, 0:2]
     tx = matrix_3x3[0, 2]
     ty = matrix_3x3[1, 2]
     
-    return (theta_deg, tx, ty, scale_x, scale_y, shear)
+    # QR decomposition: A = Q @ R, where Q is orthogonal, R is upper triangular
+    Q, R = np.linalg.qr(A)
+    
+    # Ensure Q is a pure rotation (det > 0, not reflection)
+    if np.linalg.det(Q) < 0:
+        Q[:, 1] *= -1
+        R[1, :] *= -1
+    
+    # Extract scale factors from R diagonal
+    sx = R[0, 0]
+    sy = R[1, 1]
+    
+    # Handle negative scales by absorbing sign into Q
+    if sx < 0:
+        sx = -sx
+        Q[:, 0] *= -1
+        R[0, :] *= -1
+    
+    if sy < 0:
+        sy = -sy
+        Q[:, 1] *= -1
+        R[1, :] *= -1
+    
+    # Extract rotation angle from Q (must be computed AFTER handling negative scales)
+    theta_rad = np.arctan2(Q[1, 0], Q[0, 0])
+    theta_deg = np.degrees(theta_rad)
+    
+    # Now R ~ [[sx, shear*sy], [0, sy]]
+    # Extract shear factor
+    shear = R[0, 1] / sy if abs(sy) > 1e-10 else 0.0
+    
+    return (theta_deg, tx, ty, sx, sy, shear)
 
 
 def compute_point_residuals(
@@ -566,3 +576,96 @@ def compute_point_residuals(
     residuals = np.sqrt(np.sum(diff ** 2, axis=1))
     rms_error = np.sqrt(np.mean(residuals ** 2))
     return residuals, rms_error
+
+
+def pixel_matrix_to_normalized(
+    matrix_3x3: np.ndarray,
+    fixed_size: Tuple[int, int],
+    moving_size: Tuple[int, int]
+) -> np.ndarray:
+    """Convert a pixel-coordinate matrix to normalized [-1,1] coordinate matrix.
+    
+    The input matrix operates in center-origin pixel coordinates:
+        p_fixed_pixel = M_pixel @ p_moving_pixel
+    
+    The output matrix operates in normalized coordinates [-1, 1]:
+        p_fixed_norm = M_norm @ p_moving_norm
+    
+    where normalized coordinates are defined as:
+        x_norm = x_pixel / (width / 2)
+        y_norm = y_pixel / (height / 2)
+    
+    This is compatible with PyTorch's F.affine_grid which uses normalized coords.
+    
+    Args:
+        matrix_3x3: 3x3 transformation matrix in pixel coordinates (center origin).
+        fixed_size: (width, height) of fixed image.
+        moving_size: (width, height) of moving image.
+        
+    Returns:
+        3x3 transformation matrix in normalized [-1,1] coordinates.
+    """
+    W_fixed, H_fixed = fixed_size
+    W_moving, H_moving = moving_size
+    
+    # Scale matrices for coordinate conversion
+    # S_moving: moving_norm -> moving_pixel
+    # S_moving @ p_norm = p_pixel
+    S_moving = np.array([
+        [W_moving / 2.0, 0, 0],
+        [0, H_moving / 2.0, 0],
+        [0, 0, 1]
+    ])
+    
+    # S_fixed_inv: fixed_pixel -> fixed_norm
+    # S_fixed_inv @ p_pixel = p_norm
+    S_fixed_inv = np.array([
+        [2.0 / W_fixed, 0, 0],
+        [0, 2.0 / H_fixed, 0],
+        [0, 0, 1]
+    ])
+    
+    # Combined: p_fixed_norm = S_fixed_inv @ M_pixel @ S_moving @ p_moving_norm
+    M_norm = S_fixed_inv @ matrix_3x3 @ S_moving
+    
+    return M_norm
+
+
+def normalized_matrix_to_pixel(
+    matrix_3x3: np.ndarray,
+    fixed_size: Tuple[int, int],
+    moving_size: Tuple[int, int]
+) -> np.ndarray:
+    """Convert a normalized [-1,1] coordinate matrix to pixel-coordinate matrix.
+    
+    Inverse of pixel_matrix_to_normalized.
+    
+    Args:
+        matrix_3x3: 3x3 transformation matrix in normalized coordinates.
+        fixed_size: (width, height) of fixed image.
+        moving_size: (width, height) of moving image.
+        
+    Returns:
+        3x3 transformation matrix in pixel coordinates (center origin).
+    """
+    W_fixed, H_fixed = fixed_size
+    W_moving, H_moving = moving_size
+    
+    # S_fixed: fixed_norm -> fixed_pixel
+    S_fixed = np.array([
+        [W_fixed / 2.0, 0, 0],
+        [0, H_fixed / 2.0, 0],
+        [0, 0, 1]
+    ])
+    
+    # S_moving_inv: moving_pixel -> moving_norm
+    S_moving_inv = np.array([
+        [2.0 / W_moving, 0, 0],
+        [0, 2.0 / H_moving, 0],
+        [0, 0, 1]
+    ])
+    
+    # Combined: p_fixed_pixel = S_fixed @ M_norm @ S_moving_inv @ p_moving_pixel
+    M_pixel = S_fixed @ matrix_3x3 @ S_moving_inv
+    
+    return M_pixel

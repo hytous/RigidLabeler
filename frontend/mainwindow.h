@@ -260,6 +260,10 @@ private:
     // Coordinate origin mode (false = center origin, true = top-left origin)
     bool m_useTopLeftOrigin;
     
+    // Matrix output mode (true = normalized [-1,1], false = pixel coordinates)
+    // Only effective when using center origin (m_useTopLeftOrigin = false)
+    bool m_useNormalizedMatrix;
+    
     // Preview dialog
     PreviewDialog *m_previewDialog;
     int m_currentPreviewGridSize;

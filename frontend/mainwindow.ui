@@ -350,6 +350,19 @@
             </widget>
            </item>
            <item>
+            <widget class="QCheckBox" name="chkNormalizedMatrix">
+             <property name="text">
+              <string>Normalized Matrix [-1,1]</string>
+             </property>
+             <property name="toolTip">
+              <string>Output transformation matrix in normalized coordinates [-1,1] instead of pixel coordinates. Compatible with PyTorch affine_grid. Only available when using center origin.</string>
+             </property>
+             <property name="checked">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
             <widget class="QCheckBox" name="chkSyncZoom">
              <property name="text">
               <string>Sync Zoom/Pan</string>

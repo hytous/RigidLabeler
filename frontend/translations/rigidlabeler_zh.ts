@@ -925,6 +925,26 @@ ID: %1
         <translation>勾选时，坐标以左上角为原点(0,0)。默认以图像中心为原点。</translation>
     </message>
     <message>
+        <location filename="../mainwindow.ui" line="355"/>
+        <source>Normalized Matrix [-1,1]</source>
+        <translation>归一化矩阵 [-1,1]</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.ui" line="358"/>
+        <source>Output transformation matrix in normalized coordinates [-1,1] instead of pixel coordinates. Compatible with PyTorch affine_grid. Only available when using center origin.</source>
+        <translation>输出归一化坐标[-1,1]的变换矩阵，而非像素坐标。与PyTorch affine_grid兼容。仅在使用中心原点时可用。</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="357"/>
+        <source>Matrix mode: Normalized [-1,1] (PyTorch compatible)</source>
+        <translation>矩阵模式: 归一化 [-1,1] (PyTorch兼容)</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="359"/>
+        <source>Matrix mode: Pixel coordinates</source>
+        <translation>矩阵模式: 像素坐标</translation>
+    </message>
+    <message>
         <location filename="../mainwindow.cpp" line="2395"/>
         <source>Coordinate origin: Top-left corner (0,0)</source>
         <translation>坐标原点: 左上角 (0,0)</translation>

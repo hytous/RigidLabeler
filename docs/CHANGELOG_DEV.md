@@ -4,6 +4,227 @@
 
 ---
 
+## #031 - 2025-12-08
+
+### 问题
+
+切换归一化矩阵模式后，如果用户查看预览图但未手动重新计算，会使用切换前的矩阵生成预览，导致显示错误。
+
+### 解决方案
+
+在 `chkNormalizedMatrix` 的 toggled 信号处理中，检查当前点对数量是否满足最小要求，如满足则自动触发 `computeTransform()`。
+
+### 实现
+
+```cpp
+connect(ui->chkNormalizedMatrix, &QCheckBox::toggled, this, [this](bool checked) {
+    m_useNormalizedMatrix = checked;
+    AppConfig::instance().setOptionNormalizedMatrix(checked);
+    // ...状态栏消息...
+    
+    // Auto recompute if we have enough points to avoid preview mismatch
+    int minPoints = AppConfig::instance().minPointsRequired();
+    if (m_tiePointModel->completePairCount() >= minPoints) {
+        computeTransform();
+    }
+});
+```
+
+### 修改文件
+
+- `frontend/mainwindow.cpp`
+
+---
+
+## #030 - 2025-12-08
+
+### 问题
+编译错误：
+1. `BackendClient.h:120: error: invalid use of incomplete type 'class QSize'`
+2. `BackendClient.cpp:126: error: no matching function for call to 'QJsonArray::QJsonArray(<brace-enclosed initializer list>)'`
+
+### 原因
+
+1. **QSize 不完整类型**：头文件中使用了 `QSize` 作为默认参数，但未包含 `<QSize>` 头文件
+2. **QJsonArray 初始化语法**：花括号初始化列表 `QJsonArray{a, b}` 在某些 Qt/编译器版本中不支持
+
+### 解决方案
+
+1. 在 `BackendClient.h` 中添加 `#include <QSize>`
+2. 将 `QJsonArray{...}` 改为显式 `append()` 调用
+
+### 修复代码
+
+```cpp
+// BackendClient.h - 添加头文件
+#include <QSize>
+
+// BackendClient.cpp - 修改 QJsonArray 初始化
+QJsonArray fixedSizeArray;
+fixedSizeArray.append(fixedImageSize.width());
+fixedSizeArray.append(fixedImageSize.height());
+requestBody["fixed_image_size"] = fixedSizeArray;
+```
+
+### 修改文件
+
+- `frontend/app/BackendClient.h`
+- `frontend/app/BackendClient.cpp`
+- `frontend/translations/rigidlabeler_zh.ts` - 添加归一化矩阵相关中文翻译
+
+---
+
+## #029 - 2025-12-05
+
+### 需求
+实现归一化矩阵模式选项：用户可选择输出「像素坐标矩阵」或「归一化矩阵 [-1,1]」，后者可直接用于 `torch.affine_grid()`。
+
+### 背景
+PyTorch 的 `F.affine_grid()` 使用归一化坐标系 [-1, 1]，而原有实现输出的是像素坐标系矩阵。用户需要手动转换才能使用，不够方便。
+
+### 设计
+
+**归一化公式：**
+```
+T_norm = S_fixed @ T_pixel @ S_moving_inv
+```
+
+其中：
+- `S_fixed`：将 fixed 图像像素坐标归一化的矩阵
+- `T_pixel`：原始像素坐标变换矩阵（中心原点）
+- `S_moving_inv`：将 moving 图像归一化坐标转回像素坐标的矩阵
+
+```python
+def normalize_matrix(matrix_3x3, fixed_size, moving_size):
+    W_f, H_f = fixed_size
+    W_m, H_m = moving_size
+    
+    # 归一化矩阵: pixel -> [-1, 1]
+    S_fixed = np.array([
+        [2.0 / W_f, 0, 0],
+        [0, 2.0 / H_f, 0],
+        [0, 0, 1]
+    ])
+    
+    # 反归一化矩阵: [-1, 1] -> pixel
+    S_moving_inv = np.array([
+        [W_m / 2.0, 0, 0],
+        [0, H_m / 2.0, 0],
+        [0, 0, 1]
+    ])
+    
+    return S_fixed @ matrix_3x3 @ S_moving_inv
+```
+
+**UI 交互：**
+- 新增 `chkNormalizedMatrix` 复选框，位于 `chkOriginTopLeft` 下方
+- 仅在「中心原点」模式下可用，选择「左上角原点」时自动禁用
+- 默认启用归一化矩阵模式
+
+### 实现
+
+#### 前端
+- `mainwindow.ui`: 添加 `chkNormalizedMatrix` 复选框
+- `mainwindow.h`: 添加 `m_useNormalizedMatrix` 成员变量
+- `mainwindow.cpp`: 初始化和信号连接，计算/预览时传递参数
+- `AppConfig.h/.cpp`: 添加 `optionNormalizedMatrix()` 配置项
+- `BackendClient.h/.cpp`: 更新 `computeRigid()` 和 `requestCheckerboardPreview()` 接口
+
+#### 后端
+- `schemas.py`: 添加 `use_normalized_matrix`、`fixed_image_size`、`moving_image_size` 字段
+- `transforms.py`: 添加 `normalize_matrix()` 和 `denormalize_matrix()` 函数
+- `server.py`: 处理归一化选项，返回对应格式的矩阵
+- `warp_utils.py`: `create_affine_grid()` 支持直接使用归一化矩阵
+
+#### 预览逻辑
+当使用归一化矩阵时，预览将矩阵直接用于 grid_sample，无需额外坐标转换。
+
+### 修改文件
+- `frontend/mainwindow.ui`
+- `frontend/mainwindow.h`
+- `frontend/mainwindow.cpp`
+- `frontend/app/AppConfig.h`
+- `frontend/app/AppConfig.cpp`
+- `frontend/app/BackendClient.h`
+- `frontend/app/BackendClient.cpp`
+- `backend/rigidlabeler_backend/api/schemas.py`
+- `backend/rigidlabeler_backend/api/server.py`
+- `backend/rigidlabeler_backend/core/transforms.py`
+- `backend/rigidlabeler_backend/core/warp_utils.py`
+
+---
+
+## #028 - 2025-12-05
+
+### 问题
+`matrix_to_affine_params()` 和 `compute_affine_transform()` 中使用 SVD 分解提取仿射参数（旋转角、缩放、剪切）时，计算结果不正确：
+1. 旋转角显示为补角（如 178° 而非 -2°）
+2. Scale 和 Shear 的含义不符合标准仿射分解模型
+
+### 分析
+SVD 分解 `A = U @ Σ @ V^T` 得到的奇异值总是正的且按大小排序，无法正确表达原始变换的 scale_x/scale_y 及 shear。
+
+正确的分解模型应为：
+```
+A = R @ [[sx, shear*sy], [0, sy]]
+```
+其中 R 是旋转矩阵，右边是上三角的缩放+剪切矩阵。
+
+### 解决方案
+改用 **QR 分解**：`A = Q @ R`
+- Q：正交矩阵（旋转）
+- R：上三角矩阵，直接读取 scale 和 shear
+
+### 实现
+
+```python
+def matrix_to_affine_params(matrix_3x3: np.ndarray):
+    A = matrix_3x3[0:2, 0:2]
+    tx = matrix_3x3[0, 2]
+    ty = matrix_3x3[1, 2]
+
+    # QR 分解
+    Q, R = np.linalg.qr(A)
+
+    # 确保 Q 是纯旋转（det > 0）
+    if np.linalg.det(Q) < 0:
+        Q[:, 1] *= -1
+        R[1, :] *= -1
+
+    # 从 R 读取 scale
+    sx = R[0, 0]
+    sy = R[1, 1]
+
+    # 处理负 scale，吸收进 Q
+    if sx < 0:
+        sx = -sx
+        Q[:, 0] *= -1
+        R[0, :] *= -1
+    if sy < 0:
+        sy = -sy
+        Q[:, 1] *= -1
+        R[1, :] *= -1
+
+    # 在处理完负 scale 后计算旋转角（关键！）
+    theta_rad = np.arctan2(Q[1, 0], Q[0, 0])
+    theta_deg = np.degrees(theta_rad)
+
+    # Shear
+    shear = R[0, 1] / sy if abs(sy) > 1e-10 else 0.0
+
+    return theta_deg, tx, ty, sx, sy, shear
+```
+
+### 关键修复
+**旋转角必须在处理完负 scale 之后计算**，否则翻转 Q 的列会导致角度偏差 180°。
+
+### 修改文件
+- `backend/rigidlabeler_backend/core/transforms.py`
+  - `compute_affine_transform()` - 仿射变换计算时的参数分解
+  - `matrix_to_affine_params()` - 矩阵转参数的工具函数
+
+---
+
 ## #027 - 2025-12-04
 
 ### 需求
